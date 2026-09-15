@@ -136,8 +136,14 @@ flowchart TB
 ├── src/                                       # Reference Python 3.13 Pipeline Implementation
 │   ├── embedding_worker.py                    # Multi-line stack trace coalescer, scrubber, chunker & embedder
 │   └── remediation_webhook.py                 # Change-calendar suppressor, rate limiter & Workflows dispatcher
-└── tests/
-    └── validate_all.py                        # Self-contained HCL v2, BigQuery SQL schema & Python unit test suite
+├── tests/
+│   └── validate_all.py                        # Self-contained HCL v2, BigQuery SQL schema & Python unit test suite
+└── simulation_harness/                        # Local-first Synthetic Scenario Generator & Ground-Truth Evaluation Harness
+    ├── ano/                                   # Local analytical store, semantic outlier detector & topology correlator
+    ├── scenariogen/                           # Seeded synthetic GSK telemetry generator (logs, GMP scrapes, topology)
+    ├── harness/                               # Ground-truth scoring engine (Recall >= 80%, FPR <= 10%, Lead >= 15m)
+    ├── Makefile                               # Single-command execution & evaluation entrypoints
+    └── README.md                              # Simulation harness documentation & CLI guide
 ```
 
 ---
@@ -184,7 +190,15 @@ SUMMARY: Executed 18 verification checks | Passed: 18 | Failures: 0 | Errors: 0 
 ================================================================================
 ```
 
-### 2. Deploy Production Infrastructure with Terraform
+### 2. Run Local Synthetic Scenario Generator & Ground-Truth Evaluation Harness
+To generate multi-month synthetic GSK telemetry (`LogEntry` JSONL, Prometheus scrapes, CMDB topology, and ServiceNow change schedules) and benchmark recall, false positive rate, lead time, and RCA attribution accuracy completely offline:
+
+```bash
+cd simulation_harness/
+make evaluate
+```
+
+### 3. Deploy Production Infrastructure with Terraform
 ```bash
 cd terraform/
 cp terraform.tfvars.example terraform.tfvars
@@ -196,7 +210,7 @@ terraform plan -out=ano.tfplan
 terraform apply ano.tfplan
 ```
 
-### 3. Backfill 90-Day History & Train Initial BQML Models
+### 4. Backfill 90-Day History & Train Initial BQML Models
 See [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) for full instructions on:
 1. Seeding `topology_edges` and ServiceNow `change_calendar`.
 2. Executing the 90-day GMP Prometheus backfill (`sp_backfill_90d_metrics`).

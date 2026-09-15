@@ -1,0 +1,132 @@
+{
+  "_comment": [
+    "Declarative description of the Cloud Logging LogEntry JSON wire format.",
+    "This file is DATA, not code: the interpreter lives in",
+    "ano/telemetry/logentry_validator.py. Keeping the schema as data is what",
+    "makes it auditable -- a reviewer can diff it against the vendored",
+    "Apache-2.0 proto in five minutes (VALIDATION_STRATEGY.md section 2.3).",
+    "Field numbers and snake_case names are mechanically pinned to that proto",
+    "by the drift test in tests/m2_generator/test_logentry_drift.py."
+  ],
+  "schema_version": "1.0",
+  "proto_files": {
+    "LogEntry": "third_party/googleapis/google/logging/v2/log_entry.proto",
+    "LogEntryOperation": "third_party/googleapis/google/logging/v2/log_entry.proto",
+    "LogEntrySourceLocation": "third_party/googleapis/google/logging/v2/log_entry.proto",
+    "LogSplit": "third_party/googleapis/google/logging/v2/log_entry.proto",
+    "HttpRequest": "third_party/googleapis/google/logging/type/http_request.proto"
+  },
+  "messages": {
+    "LogEntry": {
+      "fields": [
+        {"json_name": "logName", "proto_name": "log_name", "proto_number": 12, "type": "string", "required": true, "constraint": "log_name"},
+        {"json_name": "resource", "proto_name": "resource", "proto_number": 8, "type": "monitored_resource", "required": true},
+        {"json_name": "protoPayload", "proto_name": "proto_payload", "proto_number": 2, "type": "any", "oneof": "payload"},
+        {"json_name": "textPayload", "proto_name": "text_payload", "proto_number": 3, "type": "string", "oneof": "payload"},
+        {"json_name": "jsonPayload", "proto_name": "json_payload", "proto_number": 6, "type": "struct", "oneof": "payload"},
+        {"json_name": "timestamp", "proto_name": "timestamp", "proto_number": 9, "type": "timestamp"},
+        {"json_name": "receiveTimestamp", "proto_name": "receive_timestamp", "proto_number": 24, "type": "timestamp"},
+        {"json_name": "severity", "proto_name": "severity", "proto_number": 10, "type": "enum:LogSeverity"},
+        {"json_name": "insertId", "proto_name": "insert_id", "proto_number": 4, "type": "string"},
+        {"json_name": "httpRequest", "proto_name": "http_request", "proto_number": 7, "type": "message:HttpRequest"},
+        {"json_name": "labels", "proto_name": "labels", "proto_number": 11, "type": "map_string_string", "max_key_bytes": 512, "max_value_bytes": 65536},
+        {"json_name": "operation", "proto_name": "operation", "proto_number": 15, "type": "message:LogEntryOperation"},
+        {"json_name": "trace", "proto_name": "trace", "proto_number": 22, "type": "string"},
+        {"json_name": "spanId", "proto_name": "span_id", "proto_number": 27, "type": "string", "constraint": "span_id"},
+        {"json_name": "traceSampled", "proto_name": "trace_sampled", "proto_number": 30, "type": "bool"},
+        {"json_name": "sourceLocation", "proto_name": "source_location", "proto_number": 23, "type": "message:LogEntrySourceLocation"},
+        {"json_name": "split", "proto_name": "split", "proto_number": 35, "type": "message:LogSplit", "constraint": "split_index"}
+      ]
+    },
+    "HttpRequest": {
+      "fields": [
+        {"json_name": "requestMethod", "proto_name": "request_method", "proto_number": 1, "type": "string"},
+        {"json_name": "requestUrl", "proto_name": "request_url", "proto_number": 2, "type": "string"},
+        {"json_name": "requestSize", "proto_name": "request_size", "proto_number": 3, "type": "int64_string"},
+        {"json_name": "status", "proto_name": "status", "proto_number": 4, "type": "int32_number"},
+        {"json_name": "responseSize", "proto_name": "response_size", "proto_number": 5, "type": "int64_string"},
+        {"json_name": "userAgent", "proto_name": "user_agent", "proto_number": 6, "type": "string"},
+        {"json_name": "remoteIp", "proto_name": "remote_ip", "proto_number": 7, "type": "string"},
+        {"json_name": "serverIp", "proto_name": "server_ip", "proto_number": 13, "type": "string"},
+        {"json_name": "referer", "proto_name": "referer", "proto_number": 8, "type": "string"},
+        {"json_name": "latency", "proto_name": "latency", "proto_number": 14, "type": "duration"},
+        {"json_name": "cacheLookup", "proto_name": "cache_lookup", "proto_number": 11, "type": "bool"},
+        {"json_name": "cacheHit", "proto_name": "cache_hit", "proto_number": 9, "type": "bool"},
+        {"json_name": "cacheValidatedWithOriginServer", "proto_name": "cache_validated_with_origin_server", "proto_number": 10, "type": "bool"},
+        {"json_name": "cacheFillBytes", "proto_name": "cache_fill_bytes", "proto_number": 12, "type": "int64_string"},
+        {"json_name": "protocol", "proto_name": "protocol", "proto_number": 15, "type": "string"}
+      ]
+    },
+    "LogEntryOperation": {
+      "fields": [
+        {"json_name": "id", "proto_name": "id", "proto_number": 1, "type": "string"},
+        {"json_name": "producer", "proto_name": "producer", "proto_number": 2, "type": "string"},
+        {"json_name": "first", "proto_name": "first", "proto_number": 3, "type": "bool"},
+        {"json_name": "last", "proto_name": "last", "proto_number": 4, "type": "bool"}
+      ]
+    },
+    "LogEntrySourceLocation": {
+      "fields": [
+        {"json_name": "file", "proto_name": "file", "proto_number": 1, "type": "string"},
+        {"json_name": "line", "proto_name": "line", "proto_number": 2, "type": "int64_string", "min_value": 0},
+        {"json_name": "function", "proto_name": "function", "proto_number": 3, "type": "string"}
+      ]
+    },
+    "LogSplit": {
+      "fields": [
+        {"json_name": "uid", "proto_name": "uid", "proto_number": 1, "type": "string"},
+        {"json_name": "index", "proto_name": "index", "proto_number": 2, "type": "int32_number", "min_value": 0},
+        {"json_name": "totalSplits", "proto_name": "total_splits", "proto_number": 3, "type": "int32_number", "min_value": 1}
+      ]
+    }
+  },
+  "enums": {
+    "LogSeverity": {
+      "proto_file": "third_party/googleapis/google/logging/type/log_severity.proto",
+      "values": {
+        "DEFAULT": 0,
+        "DEBUG": 100,
+        "INFO": 200,
+        "NOTICE": 300,
+        "WARNING": 400,
+        "ERROR": 500,
+        "CRITICAL": 600,
+        "ALERT": 700,
+        "EMERGENCY": 800
+      }
+    }
+  },
+  "log_name_parents": ["projects", "organizations", "billingAccounts", "folders"],
+  "log_id_charset_regex": "^[A-Za-z0-9/_.-]{1,511}$",
+  "supported_any_types": [
+    "type.googleapis.com/google.cloud.audit.AuditLog",
+    "type.googleapis.com/google.appengine.logging.v1.RequestLog"
+  ],
+  "must_not_emit": {
+    "_comment": [
+      "snake_case names of LogEntry fields that exist in Google's INTERNAL",
+      "log_entry.proto but are absent from the public Apache-2.0 copy vendored",
+      "here. They are OUTPUT_ONLY, deprecated, GOOGLE_INTERNAL, TRUSTED_TESTER",
+      "or export-excluded. Emitting any of them makes export-shaped synthetic",
+      "data LESS faithful, not more -- notably error_groups, which the proto",
+      "states is excluded from Cloud Storage, BigQuery and Pub/Sub exports.",
+      "The drift test asserts every one of these is genuinely absent from the",
+      "vendored public proto; the validator rejects their JSON names."
+    ],
+    "fields": {
+      "error_groups": "errorGroups",
+      "error_group": "errorGroup",
+      "metadata": "metadata",
+      "receive_location": "receiveLocation",
+      "internal_id": "internalId",
+      "ancestor_internal_ids": "ancestorInternalIds",
+      "writer_email_address": "writerEmailAddress",
+      "internal_metadata": "internalMetadata",
+      "apphub": "apphub",
+      "apphub_destination": "apphubDestination",
+      "apphub_source": "apphubSource",
+      "transform_revisions": "transformRevisions",
+      "otel": "otel"
+    }
+  }
+}

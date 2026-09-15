@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "Monitored-resource descriptors: resource.type -> its EXACT label key set.",
+    "Restated from the public Cloud Logging resource list",
+    "(cloud.google.com/logging/docs/api/v2/resource-list), cross-checked",
+    "against the descriptor registry as recorded in LOGENTRY_SPEC.md section 5.",
+    "",
+    "Emitting a label key that is not in the descriptor's set is the single",
+    "highest-risk fidelity defect in synthetic Cloud Logging data: a hostname",
+    "in gce_instance.resource.labels instead of top-level labels is the",
+    "classic tell. Hence rule L05."
+  ],
+  "types": {
+    "gce_instance": {
+      "display_name": "VM Instance",
+      "labels": ["project_id", "instance_id", "zone"]
+    },
+    "k8s_container": {
+      "display_name": "Kubernetes Container",
+      "labels": ["project_id", "location", "cluster_name", "namespace_name", "pod_name", "container_name"]
+    },
+    "k8s_pod": {
+      "display_name": "Kubernetes Pod",
+      "labels": ["project_id", "location", "cluster_name", "namespace_name", "pod_name"]
+    },
+    "k8s_node": {
+      "display_name": "Kubernetes Node",
+      "labels": ["project_id", "location", "cluster_name", "node_name"]
+    },
+    "generic_node": {
+      "display_name": "Generic Node",
+      "labels": ["project_id", "location", "namespace", "node_id"]
+    },
+    "generic_task": {
+      "display_name": "Generic Task",
+      "labels": ["project_id", "location", "namespace", "job", "task_id"]
+    },
+    "gae_app": {
+      "display_name": "GAE Application",
+      "labels": ["project_id", "module_id", "version_id", "zone"]
+    },
+    "prometheus_target": {
+      "display_name": "Prometheus Target",
+      "labels": ["project_id", "location", "cluster", "namespace", "job", "instance"],
+      "note": "Managed Prometheus target resource. Its six labels are attached by the GMP collector at export time and MUST NOT appear as exporter-emitted metric labels (PROMETHEUS_SPEC.md section 2.2)."
+    }
+  }
+}
