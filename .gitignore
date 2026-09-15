@@ -28,3 +28,12 @@ venv/
 # Internal Agent Scratch Directories
 .agents/
 ORIGINAL_REQUEST.md
+
+# Round 2 Local Analytical Mirror & Demo Runtime State
+.cache/
+.ano_mirror/
+*.db
+*.sqlite3
+*.sqlite3-journal
+*.db-wal
+*.db-shm

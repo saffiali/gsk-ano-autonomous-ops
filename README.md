@@ -1,7 +1,8 @@
 # GSK Autonomous Operations (ANO) — GCP AI-Ops Architecture & Production Terraform Suite
 
 [![Terraform Validation](https://img.shields.io/badge/Terraform_HCL_v2-20%2F20_Passed-success?logo=terraform)](./terraform)
-[![Automated Verification Suite](https://img.shields.io/badge/Verification_Suite-18%2F18_Passed_(100%25)-brightgreen?logo=python)](./tests/validate_all.py)
+[![Automated Verification Suite](https://img.shields.io/badge/Verification_Suite-24%2F24_Passed_(100%25)-brightgreen?logo=python)](./tests/validate_all.py)
+[![Live Demo & Web UI](https://img.shields.io/badge/Customer_Demo-4--Act_CLI_%26_Executive_Web_Dashboard-blue?logo=googlecloud)](./docs/CUSTOMER_DEMO_RUNBOOK.md)
 [![GCP Native Stack](https://img.shields.io/badge/Google_Cloud-Cloud_Logging_%7C_GMP_%7C_Vertex_AI_%7C_BigQuery_ML_%7C_Eventarc-4285F4?logo=googlecloud)](./docs/ARCHITECTURE_AND_PIPELINE.md)
 
 This repository delivers the end-to-end Google Cloud Platform (GCP) architecture, data pipeline strategy, modular production-ready Terraform Infrastructure-as-Code (IaC), reference Python streaming/remediation workers, and automated verification suite for **GSK's Autonomous Operations (ANO)** initiative.
@@ -120,7 +121,10 @@ flowchart TB
 ├── PROJECT.md                                 # Architectural contracts, feature inventory & schemas
 ├── docs/
 │   ├── ARCHITECTURE_AND_PIPELINE.md           # Comprehensive 5-pillar architecture & data pipeline blueprint
-│   └── DEPLOYMENT_GUIDE.md                    # Step-by-step production deployment & BQML training runbook
+│   ├── DEPLOYMENT_GUIDE.md                    # Step-by-step production deployment & BQML training runbook
+│   └── CUSTOMER_DEMO_RUNBOOK.md               # Live 4-Act Customer Demo presenter script, SQL & talking points
+├── scripts/
+│   └── deploy_to_gcp.py                       # Automated GCP deployer (gke-demos-363017) & local SQLite mirror
 ├── terraform/                                 # Modular production-ready Terraform IaC suite (20 .tf files)
 │   ├── main.tf                                # Root module wiring all 5 architectural domains
 │   ├── variables.tf                           # Global input variables with validation rules
@@ -133,11 +137,15 @@ flowchart TB
 │       ├── bqml_analytics/                    # BQML Stored Procedures for Capabilities 1, 2 & 3
 │       ├── embedding_pipeline/                # Cloud Run v2 Streaming Worker, SA, IAM & Eventarc Trigger
 │       └── alerting_and_remediation/          # Cloud Workflows, Remediation Webhook, Eventarc & Alert Policies
-├── src/                                       # Reference Python 3.13 Pipeline Implementation
+├── src/                                       # Reference Python 3.13 Pipeline & Live Demo Suite
 │   ├── embedding_worker.py                    # Multi-line stack trace coalescer, scrubber, chunker & embedder
-│   └── remediation_webhook.py                 # Change-calendar suppressor, rate limiter & Workflows dispatcher
+│   ├── remediation_webhook.py                 # Change-calendar suppressor, rate limiter & Workflows dispatcher
+│   ├── mirror_store.py                        # Dual-mode BigQuery REST API & SQLite3 analytical mirror engine
+│   ├── seed_live_demo.py                      # 90-day seasonal GMP seeder, topology graph & live incident injector
+│   ├── demo_runner.py                         # Interactive 4-Act CLI Demo presenter with live SQL & executive tables
+│   └── demo_dashboard.py                      # Zero-dependency Executive AI-Ops Web UI Dashboard (port 8080)
 ├── tests/
-│   └── validate_all.py                        # Self-contained HCL v2, BigQuery SQL schema & Python unit test suite
+│   └── validate_all.py                        # Self-contained HCL v2, BigQuery SQL, Python unit & Round 2 demo test suite
 └── simulation_harness/                        # Local-first Synthetic Scenario Generator & Ground-Truth Evaluation Harness
     ├── ano/                                   # Local analytical store, semantic outlier detector & topology correlator
     ├── scenariogen/                           # Seeded synthetic GSK telemetry generator (logs, GMP scrapes, topology)
@@ -148,10 +156,44 @@ flowchart TB
 
 ---
 
+## 🎬 Live 4-Act Customer Demo & Executive Web Dashboard (`gke-demos-363017`)
+
+The platform includes an interactive, self-contained customer demonstration suite targeting GCP project `gke-demos-363017` (`europe-west2` / BigQuery `EU`) backed by a dual-mode analytical mirror (`src/mirror_store.py`) that runs 100% seamlessly both online and offline.
+
+### Step 1 — Automated Provisioning & Local Fallback (`scripts/deploy_to_gcp.py`)
+```bash
+python3 scripts/deploy_to_gcp.py --project gke-demos-363017 --verify
+```
+Automatically checks active `gcloud` credentials, provisions dataset `gsk_ano_ops`, creates all 6 partitioned/clustered tables (`raw_logs`, `log_embeddings`, `gmp_metrics`, `topology_edges`, `change_calendar`, `incidents_predictions`), builds the `TREE_AH` Vector Index, and deploys the 3 BQML models in `gke-demos-363017` (or seamlessly initializes the local SQLite analytical mirror if running offline).
+
+### Step 2 — Live Telemetry & Topology Seeding (`src/seed_live_demo.py`)
+```bash
+python3 src/seed_live_demo.py --project gke-demos-363017 --inject-live-incidents
+```
+Seeds 90 days of seasonal GMP Prometheus metrics, the `tomcat-app-stv-01` $\rightarrow$ `ora-db-stv-01` $\rightarrow$ `core-sw-lon-01` CMDB dependency graph, ServiceNow maintenance window `CHG0049281`, and on-demand multi-line Java/Oracle deadlock stack traces and OSPF flap telemetry.
+
+### Step 3 — Interactive 4-Act CLI Demo Runner (`src/demo_runner.py`)
+```bash
+python3 src/demo_runner.py --project gke-demos-363017 --act all
+```
+Walks through all 4 Acts with live SQL execution, formatted executive tables, and presenter talking points:
+- **Act 1:** Zero-Regex Semantic Outlier Detection (`text-embedding-005` 768-dim + `VECTOR_SEARCH` cosine distance `0.421 > 0.35`).
+- **Act 2:** Server Unresponsiveness Prediction (`ML.PREDICT` catching thread starvation & socket exhaustion **22m ahead** at **65.2% CPU**).
+- **Act 3:** Cross-Domain Root Cause Attribution (2-hop graph traversal proving Tomcat HTTP 500s are caused by `core-sw-lon-01` OSPF flaps).
+- **Act 4:** Dynamic 3-Month Rolling Baselines (`ARIMA_PLUS_XREG`) & ServiceNow Suppression (`CHG0049281` suppressed vs. unscheduled incident triggering Eventarc + Cloud Workflows `gsk-ano-network-ospf-reroute`).
+
+### Step 4 — Interactive Executive Web UI Dashboard (`src/demo_dashboard.py`)
+```bash
+python3 src/demo_dashboard.py --port 8080
+```
+Launches the dark-themed Executive Web UI featuring real-time KPI headers (`12,000 VMs`, `71.2B events/day`, `78.6% MTTR reduction`, `85,500 hrs/yr toil saved`), an interactive SVG Topology Graph Visualizer, a 768-Dim Embedding Explorer, a ServiceNow Suppression & Eventarc Self-Healing Log, and 1-click Act triggers. See [`docs/CUSTOMER_DEMO_RUNBOOK.md`](./docs/CUSTOMER_DEMO_RUNBOOK.md) for the full presenter guide.
+
+---
+
 ## 🚀 Quickstart: Deployment & Verification
 
 ### 1. Run Automated Verification Suite (Offline / Local)
-Verify all 20 Terraform HCL files, 6 BigQuery table schemas, Vector Search DDL, 3 BQML stored procedures, and Python worker unit tests:
+Verify all 20 Terraform HCL files, 6 BigQuery table schemas, Vector Search DDL, 3 BQML stored procedures, Python worker unit tests, and Round 2 Live Demo & Web Dashboard endpoints:
 
 ```bash
 python3 tests/validate_all.py
@@ -180,13 +222,19 @@ test_3_6_remediation_webhook_unsuppressed_dispatch_and_rate_limiting ... ok
 test_3_7_pubsub_and_cloudevent_envelope_end_to_end ... ok
 test_3_8_bigquery_rest_query_and_hourly_rate_cap ... ok
 test_3_9_adversarial_edge_cases_and_concurrency ... ok
+test_4_1_deploy_to_gcp_script_verification_and_local_mirror ... ok
+test_4_2_seed_live_demo_telemetry_and_incident_injection ... ok
+test_4_3_demo_runner_cli_four_acts_execution ... ok
+test_4_4_demo_dashboard_web_ui_and_rest_api_endpoints ... ok
+test_4_5_round2_documentation_and_runbook_completeness ... ok
+test_4_6_git_secrets_and_working_tree_safety ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 0.253s
+Ran 24 tests in 0.812s
 
 OK
 --------------------------------------------------------------------------------
-SUMMARY: Executed 18 verification checks | Passed: 18 | Failures: 0 | Errors: 0 | Pass Rate: 100.0%
+SUMMARY: Executed 24 verification checks | Passed: 24 | Failures: 0 | Errors: 0 | Pass Rate: 100.0%
 ================================================================================
 ```
 

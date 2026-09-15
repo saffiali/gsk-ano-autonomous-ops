@@ -27,6 +27,12 @@ This self-contained verification runner programmatically validates:
      768-dim payload formatting, BigQuery streaming writer) and `src/remediation_webhook.py`
      (deterministic `change_calendar` maintenance suppression, unsuppressed remediation dispatch,
      and per-entity sliding-window cooldown rate limiting).
+4. Suite 4 (`Round2LiveDemoAndDashboardSuite`):
+   - End-to-end validation of Round 2 GCP live deployment script (`scripts/deploy_to_gcp.py`),
+     dual-mode SQLite/BigQuery analytical mirror (`src/mirror_store.py`), 90-day seasonal telemetry
+     and live incident seeder (`src/seed_live_demo.py`), interactive 4-Act CLI demo runner (`src/demo_runner.py`),
+     executive web UI dashboard & REST API server (`src/demo_dashboard.py`), customer runbook documentation
+     (`docs/CUSTOMER_DEMO_RUNBOOK.md`), and repository `git secrets` working tree safety.
 """
 
 from __future__ import annotations
@@ -37,9 +43,13 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
+import tempfile
+import threading
 import unittest
+import urllib.request
 from typing import Any
 
 # Add project root to sys.path so `src` is importable from any working directory
@@ -1411,6 +1421,287 @@ class PythonPipelineUnitTestSuite(unittest.TestCase):
     self.assertTrue(limiter.allow_execution("sw-01", "REROUTE_OSPF_TRAFFIC", 1000.0)[0])
 
 
+# ==============================================================================
+# SUITE 4: Round 2 Live Customer Demo, Seeder, CLI Runner & Web UI Dashboard Suite
+# ==============================================================================
+
+
+class Round2LiveDemoAndDashboardSuite(unittest.TestCase):
+  """Validates scripts/deploy_to_gcp.py, src/seed_live_demo.py, src/demo_runner.py, src/demo_dashboard.py, and docs."""
+
+  def setUp(self) -> None:
+    """Creates an isolated temporary directory for local SQLite/JSON mirror testing."""
+    self.temp_dir = tempfile.TemporaryDirectory()
+    self.mirror_db_path = Path(self.temp_dir.name) / "gsk_ano_ops_mirror.db"
+    os.environ["GSK_ANO_MIRROR_PATH"] = str(self.mirror_db_path)
+
+  def tearDown(self) -> None:
+    """Cleans up temporary mirror files and environment overrides."""
+    os.environ.pop("GSK_ANO_MIRROR_PATH", None)
+    self.temp_dir.cleanup()
+
+  def test_4_1_deploy_to_gcp_script_verification_and_local_mirror(self) -> None:
+    """Verifies scripts/deploy_to_gcp.py --project gke-demos-363017 --verify initializes mirror and validates all payloads."""
+    deploy_script = PROJECT_ROOT / "scripts" / "deploy_to_gcp.py"
+    self.assertTrue(deploy_script.is_file(), f"Missing {deploy_script}")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(deploy_script),
+            "--project",
+            "gke-demos-363017",
+            "--verify",
+            "--local-fallback",
+            "--mirror-path",
+            str(self.mirror_db_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    self.assertEqual(
+        proc.returncode,
+        0,
+        f"deploy_to_gcp.py failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}",
+    )
+    output = proc.stdout
+    self.assertIn("gke-demos-363017", output)
+    self.assertIn("gsk_ano_ops", output)
+    for table_name in CANONICAL_TABLES_SPEC:
+      self.assertIn(table_name, output)
+    self.assertIn("TREE_AH", output)
+    self.assertTrue(self.mirror_db_path.exists(), "Local SQLite mirror file was not created")
+
+  def test_4_2_seed_live_demo_telemetry_and_incident_injection(self) -> None:
+    """Verifies src/seed_live_demo.py seeds 90d metrics, tomcat->ora->switch topology, CHG0049281, and live incidents."""
+    # First initialize mirror
+    subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "deploy_to_gcp.py"),
+            "--project",
+            "gke-demos-363017",
+            "--local-fallback",
+            "--mirror-path",
+            str(self.mirror_db_path),
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    seed_script = PROJECT_ROOT / "src" / "seed_live_demo.py"
+    self.assertTrue(seed_script.is_file(), f"Missing {seed_script}")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(seed_script),
+            "--project",
+            "gke-demos-363017",
+            "--inject-live-incidents",
+            "--mirror-path",
+            str(self.mirror_db_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    self.assertEqual(proc.returncode, 0, f"seed_live_demo.py failed:\n{proc.stderr}")
+
+    # Verify SQLite mirror contents directly
+    conn = sqlite3.connect(str(self.mirror_db_path))
+    cursor = conn.cursor()
+
+    # Verify topology edges: tomcat-app-stv-01 -> ora-db-stv-01 -> core-sw-lon-01
+    cursor.execute("SELECT source_entity_id, target_entity_id FROM topology_edges")
+    edges = set(cursor.fetchall())
+    self.assertIn(("tomcat-app-stv-01", "ora-db-stv-01"), edges)
+    self.assertIn(("ora-db-stv-01", "core-sw-lon-01"), edges)
+
+    # Verify ServiceNow maintenance window CHG0049281
+    cursor.execute("SELECT change_id, suppress_alerts FROM change_calendar WHERE change_id = 'CHG0049281'")
+    chg_row = cursor.fetchone()
+    self.assertIsNotNone(chg_row, "Active change window CHG0049281 not found in change_calendar")
+    self.assertTrue(bool(chg_row[1]), "CHG0049281 must have suppress_alerts = True")
+
+    # Verify GMP metrics and injected incidents
+    cursor.execute("SELECT COUNT(*) FROM gmp_metrics")
+    self.assertGreater(cursor.fetchone()[0], 100, "Expected seeded historical rows in gmp_metrics")
+    cursor.execute("SELECT COUNT(*) FROM raw_logs")
+    self.assertGreater(cursor.fetchone()[0], 0, "Expected injected incident logs in raw_logs")
+    cursor.execute("SELECT COUNT(*) FROM log_embeddings")
+    self.assertGreater(cursor.fetchone()[0], 0, "Expected injected incident rows in log_embeddings")
+    conn.close()
+
+  def test_4_3_demo_runner_cli_four_acts_execution(self) -> None:
+    """Verifies src/demo_runner.py --project gke-demos-363017 --act all runs all 4 Acts with SQL, tables, and talking points."""
+    runner_script = PROJECT_ROOT / "src" / "demo_runner.py"
+    self.assertTrue(runner_script.is_file(), f"Missing {runner_script}")
+
+    # Ensure mirror is seeded
+    subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "src" / "seed_live_demo.py"), "--mirror-path", str(self.mirror_db_path)],
+        capture_output=True,
+        check=False,
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(runner_script),
+            "--project",
+            "gke-demos-363017",
+            "--act",
+            "all",
+            "--mirror-path",
+            str(self.mirror_db_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    self.assertEqual(proc.returncode, 0, f"demo_runner.py failed:\n{proc.stderr}")
+    out = proc.stdout
+
+    # Assert all 4 Acts, key SQL constructs, entities, and talking points appear
+    self.assertIn("ACT 1", out.upper())
+    self.assertIn("VECTOR_SEARCH", out)
+    self.assertIn("text-embedding-005", out)
+    self.assertIn("ACT 2", out.upper())
+    self.assertIn("ML.PREDICT", out)
+    self.assertIn("22", out)  # 22 mins lead time
+    self.assertIn("ACT 3", out.upper())
+    self.assertIn("tomcat-app-stv-01", out)
+    self.assertIn("ora-db-stv-01", out)
+    self.assertIn("core-sw-lon-01", out)
+    self.assertIn("ACT 4", out.upper())
+    self.assertIn("CHG0049281", out)
+    self.assertIn("ARIMA_PLUS_XREG", out)
+    self.assertIn("gsk-ano-network-ospf-reroute", out)
+
+  def test_4_4_demo_dashboard_web_ui_and_rest_api_endpoints(self) -> None:
+    """Starts src/demo_dashboard.py on an ephemeral port and verifies HTML UI, GET endpoints, and POST /api/trigger_act/1..4."""
+    from src.demo_dashboard import create_dashboard_server
+
+    server = create_dashboard_server(
+        host="127.0.0.1",
+        port=0,
+        project_id="gke-demos-363017",
+        mirror_path=str(self.mirror_db_path),
+    )
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+      base_url = f"http://127.0.0.1:{port}"
+
+      # 1. Verify HTML Dashboard UI (GET /)
+      with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+        self.assertEqual(resp.status, 200)
+        html = resp.read().decode("utf-8")
+        self.assertIn("GSK Autonomous Operations", html)
+        self.assertIn("12,000", html)
+        self.assertIn("71.2B", html)
+        self.assertIn("tomcat-app-stv-01", html)
+        self.assertIn("core-sw-lon-01", html)
+        self.assertIn("CHG0049281", html)
+
+      # 2. Verify GET /api/status
+      with urllib.request.urlopen(f"{base_url}/api/status", timeout=5) as resp:
+        self.assertEqual(resp.status, 200)
+        status_data = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(status_data["project_id"], "gke-demos-363017")
+        self.assertIn("kpis", status_data)
+
+      # 3. Verify GET /api/topology
+      with urllib.request.urlopen(f"{base_url}/api/topology", timeout=5) as resp:
+        self.assertEqual(resp.status, 200)
+        topo_data = json.loads(resp.read().decode("utf-8"))
+        node_ids = {n["id"] for n in topo_data["nodes"]}
+        self.assertIn("tomcat-app-stv-01", node_ids)
+        self.assertIn("ora-db-stv-01", node_ids)
+        self.assertIn("core-sw-lon-01", node_ids)
+
+      # 4. Verify GET /api/incidents
+      with urllib.request.urlopen(f"{base_url}/api/incidents", timeout=5) as resp:
+        self.assertEqual(resp.status, 200)
+        inc_data = json.loads(resp.read().decode("utf-8"))
+        self.assertIn("incidents", inc_data)
+
+      # 5. Verify POST /api/trigger_act/1..4
+      for act_id in [1, 2, 3, 4]:
+        req = urllib.request.Request(
+            f"{base_url}/api/trigger_act/{act_id}",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+          self.assertEqual(resp.status, 200)
+          act_res = json.loads(resp.read().decode("utf-8"))
+          self.assertEqual(act_res["status"], "SUCCESS")
+          self.assertEqual(act_res["act_id"], act_id)
+          self.assertIn("sql_query", act_res)
+          self.assertIn("talking_points", act_res)
+    finally:
+      server.shutdown()
+      server.server_close()
+
+  def test_4_5_round2_documentation_and_runbook_completeness(self) -> None:
+    """Verifies docs/CUSTOMER_DEMO_RUNBOOK.md and updated README.md contain all required Round 2 sections."""
+    runbook_path = PROJECT_ROOT / "docs" / "CUSTOMER_DEMO_RUNBOOK.md"
+    self.assertTrue(runbook_path.is_file(), "Missing docs/CUSTOMER_DEMO_RUNBOOK.md")
+    runbook_text = runbook_path.read_text(encoding="utf-8")
+    self.assertGreaterEqual(len(runbook_text), 4000, "CUSTOMER_DEMO_RUNBOOK.md is too short")
+    for required_term in [
+        "gke-demos-363017",
+        "Act 1",
+        "Act 2",
+        "Act 3",
+        "Act 4",
+        "tomcat-app-stv-01",
+        "ora-db-stv-01",
+        "core-sw-lon-01",
+        "CHG0049281",
+        "demo_dashboard.py",
+        "demo_runner.py",
+    ]:
+      self.assertIn(required_term, runbook_text, f"Missing '{required_term}' in CUSTOMER_DEMO_RUNBOOK.md")
+
+    readme_text = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    for readme_term in [
+        "deploy_to_gcp.py",
+        "seed_live_demo.py",
+        "demo_runner.py",
+        "demo_dashboard.py",
+        "CUSTOMER_DEMO_RUNBOOK.md",
+        "gke-demos-363017",
+    ]:
+      self.assertIn(readme_term, readme_text, f"Missing '{readme_term}' in README.md")
+
+  def test_4_6_git_secrets_and_working_tree_safety(self) -> None:
+    """Scans all Python, Markdown, and Terraform files to ensure zero forbidden secret patterns exist."""
+    forbidden_regexes = [
+        re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+        re.compile(r"ya29\.[0-9A-Za-z_-]+"),
+        re.compile(r"(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}"),
+    ]
+    for path in PROJECT_ROOT.rglob("*"):
+      if path.is_file() and not any(
+          p in path.parts for p in [".git", ".agents", "__pycache__", ".cache", ".ano_mirror"]
+      ):
+        if path.suffix in {".py", ".md", ".tf", ".json", ".sh", ".yaml", ".yml"}:
+          content = path.read_text(encoding="utf-8", errors="ignore")
+          for pattern in forbidden_regexes:
+            match = pattern.search(content)
+            self.assertIsNone(
+                match,
+                f"Forbidden git-secrets pattern '{match.group(0) if match else ''}' found in {path}!",
+            )
+
+
 def main() -> None:
   """Executes all validation suites and prints a formatted summary report."""
   print("=" * 80)
@@ -1422,6 +1713,7 @@ def main() -> None:
   suite.addTests(loader.loadTestsFromTestCase(TerraformValidationSuite))
   suite.addTests(loader.loadTestsFromTestCase(SQLSchemaValidationSuite))
   suite.addTests(loader.loadTestsFromTestCase(PythonPipelineUnitTestSuite))
+  suite.addTests(loader.loadTestsFromTestCase(Round2LiveDemoAndDashboardSuite))
 
   runner = unittest.TextTestRunner(verbosity=2)
   result = runner.run(suite)
