@@ -1,0 +1,18 @@
+project_id                = "gsk-ano-production-01"
+project_number            = "987654321098"
+region                    = "us-central1"
+environment               = "prod"
+dataset_id                = "gsk_ano_ops"
+log_sink_filter           = "severity >= WARNING OR jsonPayload.domain =~ \"(COMPUTE|APPLICATION|DATABASE|NETWORK)\""
+embedding_model_name      = "text-embedding-005"
+embedding_worker_image    = "us-central1-docker.pkg.dev/gsk-ano-production-01/ano-containers/embedding-worker:v1.0.0"
+remediation_webhook_image = "us-central1-docker.pkg.dev/gsk-ano-production-01/ano-containers/remediation-webhook:v1.0.0"
+notification_email        = "gsk-ano-global-soc@gsk.com"
+pagerduty_service_key     = "pd-prod-service-key-placeholder"
+
+labels = {
+  project     = "gsk-autonomous-operations"
+  managed_by  = "terraform"
+  cost_center = "gsk-it-hosting-network"
+  initiative  = "predictive-self-healing"
+}
