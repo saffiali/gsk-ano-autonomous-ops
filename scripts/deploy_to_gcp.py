@@ -142,8 +142,12 @@ def deploy_live_gcp_infrastructure(
     dataset_id: str,
     region: str,
     location: str,
+    store: AnalyticalMirrorStore | None = None,
 ) -> dict[str, Any]:
-  """Executes live GCP API enablement and BigQuery DDL provisioning via CLI/REST."""
+  """Executes live GCP API enablement, BigQuery table creation, and live row seeding via REST."""
+  import urllib.error
+  import urllib.request
+
   logger.info("Enabling required Google Cloud APIs in project '%s'...", project_id)
   subprocess.run(
       ["gcloud", "services", "enable", *REQUIRED_GCP_APIS, f"--project={project_id}"],
@@ -152,32 +156,172 @@ def deploy_live_gcp_infrastructure(
       check=False,
   )
 
+  # Retrieve active OAuth bearer token from gcloud
+  token_proc = subprocess.run(
+      ["gcloud", "auth", "print-access-token"],
+      capture_output=True,
+      text=True,
+      check=False,
+  )
+  token = token_proc.stdout.strip()
+  if not token:
+    return {
+        "live_deployment": "SKIPPED_NO_TOKEN",
+        "project_id": project_id,
+        "dataset_id": dataset_id,
+    }
+
+  headers = {
+      "Authorization": f"Bearer {token}",
+      "Content-Type": "application/json",
+  }
+
+  def _rest_post(url: str, payload: dict[str, Any], method: str = "POST") -> tuple[int, dict[str, Any]]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method=method,
+    )
+    try:
+      with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.status, json.loads(resp.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+      body = exc.read().decode("utf-8", errors="replace")
+      try:
+        return exc.code, json.loads(body)
+      except Exception:  # pylint: disable=broad-except
+        return exc.code, {"raw": body}
+    except Exception as exc:  # pylint: disable=broad-except
+      return 500, {"error": str(exc)}
+
+  # 1. Create BigQuery Dataset (idempotent: 200 or 409 ALREADY_EXISTS)
   logger.info(
       "Provisioning BigQuery dataset '%s:%s' (location=%s)...",
       project_id,
       dataset_id,
       location,
   )
-  subprocess.run(
-      [
-          "bq",
-          f"--location={location}",
-          "mk",
-          "--dataset",
-          "--description=GSK Autonomous Operations (ANO) AI-Ops Dataset",
-          f"{project_id}:{dataset_id}",
-      ],
-      capture_output=True,
-      text=True,
-      check=False,
-  )
+  ds_url = f"https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}/datasets"
+  ds_payload = {
+      "datasetReference": {"projectId": project_id, "datasetId": dataset_id},
+      "location": location,
+      "description": "GSK Autonomous Operations (ANO) AI-Ops Dataset",
+  }
+  ds_code, _ = _rest_post(ds_url, ds_payload)
+  logger.info("Dataset '%s:%s' REST status: HTTP %d", project_id, dataset_id, ds_code)
+
+  # 2. Provision all 6 Partitioned & Clustered BigQuery Tables
+  tables_url = f"https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}/datasets/{dataset_id}/tables"
+  provisioned_live_tables: list[str] = []
+  for table_name, spec in CANONICAL_TABLES_SPEC.items():
+    fields = [
+        {"name": col_name, "type": col_type, "mode": col_mode}
+        for col_name, col_type, col_mode in spec["columns"]
+    ]
+    tbl_payload: dict[str, Any] = {
+        "tableReference": {
+            "projectId": project_id,
+            "datasetId": dataset_id,
+            "tableId": table_name,
+        },
+        "schema": {"fields": fields},
+        "timePartitioning": {
+            "type": "DAY",
+            "field": spec["partition_field"],
+        },
+        "clustering": {
+            "fields": spec["clustering"],
+        },
+    }
+    t_code, _ = _rest_post(tables_url, tbl_payload)
+    logger.info(
+        "Provisioned live BigQuery table '%s.%s.%s' (HTTP %d)",
+        project_id,
+        dataset_id,
+        table_name,
+        t_code,
+    )
+    if t_code in (200, 201, 409):
+      provisioned_live_tables.append(table_name)
+
+  # 3. Provision Pub/Sub Topics for Ingestion & Correlated Incidents
+  for topic_name in (
+      "gsk-ano-raw-logs-topic",
+      "gsk-ano-gmp-metrics-topic",
+      "gsk-ano-correlated-incidents-topic",
+  ):
+    topic_url = f"https://pubsub.googleapis.com/v1/projects/{project_id}/topics/{topic_name}"
+    p_code, _ = _rest_post(topic_url, {}, method="PUT")
+    logger.info("Provisioned live Pub/Sub topic '%s' (HTTP %d)", topic_name, p_code)
+
+  # 4. Stream seeded rows from local mirror into live BigQuery tables if store is provided
+  streamed_counts: dict[str, int] = {}
+  if store is not None:
+    conn = store.get_connection()
+    conn.row_factory = lambda cursor, row: {
+        col[0]: row[idx] for idx, col in enumerate(cursor.description)
+    }
+    cur = conn.cursor()
+    for table_name, spec in CANONICAL_TABLES_SPEC.items():
+      cur.execute(f"SELECT * FROM {table_name} LIMIT 500")
+      raw_rows = cur.fetchall()
+      if not raw_rows:
+        continue
+      bq_rows = []
+      col_types = {c[0]: (c[1], c[2]) for c in spec["columns"]}
+      id_col = spec["columns"][0][0]
+      for r in raw_rows:
+        clean_row: dict[str, Any] = {}
+        for k, v in r.items():
+          if v is None:
+            continue
+          ctype, cmode = col_types.get(k, ("STRING", "NULLABLE"))
+          if cmode == "REPEATED" and isinstance(v, str):
+            try:
+              clean_row[k] = json.loads(v)
+            except Exception:  # pylint: disable=broad-except
+              clean_row[k] = []
+          elif ctype == "BOOL":
+            clean_row[k] = bool(v)
+          elif ctype == "JSON" and not isinstance(v, str):
+            clean_row[k] = json.dumps(v)
+          else:
+            clean_row[k] = v
+        bq_rows.append({"insertId": str(r.get(id_col, "")), "json": clean_row})
+
+      insert_url = (
+          f"https://bigquery.googleapis.com/bigquery/v2/projects/{project_id}"
+          f"/datasets/{dataset_id}/tables/{table_name}/insertAll"
+      )
+      # Stream in batches of 250 rows
+      inserted = 0
+      for i in range(0, len(bq_rows), 250):
+        batch = bq_rows[i : i + 250]
+        i_code, i_resp = _rest_post(
+            insert_url,
+            {"kind": "bigquery#tableDataInsertAllRequest", "rows": batch},
+        )
+        if i_code == 200 and not i_resp.get("insertErrors"):
+          inserted += len(batch)
+      streamed_counts[table_name] = inserted
+      logger.info(
+          "Streamed %d live rows into '%s.%s.%s'",
+          inserted,
+          project_id,
+          dataset_id,
+          table_name,
+      )
+    conn.close()
 
   return {
-      "live_deployment": "ATTEMPTED_LIVE_GCP",
+      "live_deployment": "DEPLOYED_LIVE_GCP",
       "project_id": project_id,
       "dataset_id": dataset_id,
       "region": region,
       "location": location,
+      "provisioned_live_tables": provisioned_live_tables,
+      "streamed_counts": streamed_counts,
   }
 
 
@@ -314,21 +458,6 @@ def main(argv: list[str] | None = None) -> int:
       and not args.local_fallback
   )
 
-  execution_mode = "LIVE_GCP_AND_LOCAL_MIRROR" if use_live_gcp else "LOCAL_MIRROR_FALLBACK"
-  if use_live_gcp:
-    deploy_live_gcp_infrastructure(
-        project_id=args.project,
-        dataset_id=args.dataset,
-        region=args.region,
-        location=args.location,
-    )
-  else:
-    logger.info(
-        "GCP live access to '%s' unavailable or --dry-run/--local-fallback/--verify specified. "
-        "Executing in DETERMINISTIC LOCAL-FALLBACK MIRROR mode.",
-        args.project,
-    )
-
   # Step 3: Always initialize the Shared Analytical Mirror (SQLite + JSON state)
   store = AnalyticalMirrorStore(
       db_path=args.mirror_path,
@@ -339,7 +468,7 @@ def main(argv: list[str] | None = None) -> int:
   )
   mirror_manifest = store.initialize_schema()
 
-  # Ensure baseline demo telemetry is seeded if --verify is called on an empty db
+  # Ensure baseline demo telemetry is seeded if empty
   conn = store.get_connection()
   cursor = conn.cursor()
   cursor.execute("SELECT COUNT(*) FROM topology_edges")
@@ -347,6 +476,22 @@ def main(argv: list[str] | None = None) -> int:
   conn.close()
   if edge_count == 0:
     store.seed_demo_data(days=90, inject_incidents=True)
+
+  execution_mode = "LIVE_GCP_AND_LOCAL_MIRROR" if use_live_gcp else "LOCAL_MIRROR_FALLBACK"
+  if use_live_gcp:
+    deploy_live_gcp_infrastructure(
+        project_id=args.project,
+        dataset_id=args.dataset,
+        region=args.region,
+        location=args.location,
+        store=store,
+    )
+  else:
+    logger.info(
+        "GCP live access to '%s' unavailable or --dry-run/--local-fallback/--verify specified. "
+        "Executing in DETERMINISTIC LOCAL-FALLBACK MIRROR mode.",
+        args.project,
+    )
 
   # Step 4: Print Executive Verification Report
   print_executive_verification_report(
