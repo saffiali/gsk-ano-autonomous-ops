@@ -1,0 +1,56 @@
+# OpenTelemetry Collector Configuration: GSK Production DaemonSet
+# Route scraped metrics simultaneously to GMP (OTLP) and Cloud Monitoring / BigQuery pipeline
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'gsk-workload-metrics'
+          scrape_interval: 30s
+          static_configs:
+            # Scrape legitimate workload endpoints; avoid binding to non-routable 0.0.0.0
+            - targets: ['127.0.0.1:9090', 'localhost:8080']
+          relabel_configs:
+            - source_labels: [__address__]
+              target_label: instance
+            - target_label: enterprise_domain
+              replacement: "Pharma_Manufacturing"
+
+processors:
+  # CRITICAL: memory_limiter must precede batch processor to prevent daemonset OOM evictions
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+
+  batch:
+    send_batch_max_size: 1000
+    timeout: 10s
+
+  resourcedetection:
+    detectors: [gcp, env]
+    timeout: 2s
+
+exporters:
+  # Destination 1: Recommended OTLP Exporter for GMP
+  otlp:
+    endpoint: "telemetry.googleapis.com:443"
+    tls:
+      insecure: false
+
+  # Destination 2: Google Cloud Observability Metric Exporter
+  googlecloud:
+    project: "gke-demos-363017"
+    metric:
+      prefix: "custom.googleapis.com/gsk"
+
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      # memory_limiter must execute first
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [otlp, googlecloud]

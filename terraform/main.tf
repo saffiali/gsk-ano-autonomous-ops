@@ -69,3 +69,14 @@ module "alerting_and_remediation" {
   pagerduty_service_key         = var.pagerduty_service_key
   labels                        = var.labels
 }
+
+module "observability_lakehouse" {
+  source = "./modules/observability_lakehouse"
+
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  observability_dataset_id = var.observability_dataset_id
+  labels                   = var.labels
+}
+

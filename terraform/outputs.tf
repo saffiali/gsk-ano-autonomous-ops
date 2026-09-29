@@ -32,3 +32,14 @@ output "alert_policy_ids" {
   description = "List of Cloud Monitoring alert policy IDs configured with change-window noise suppression."
   value       = module.alerting_and_remediation.alert_policy_ids
 }
+
+output "observability_dataset_id" {
+  description = "BigQuery dataset ID for the GSK Enterprise Observability Lakehouse and ISO GQL Property Graph."
+  value       = module.observability_lakehouse.observability_dataset_id
+}
+
+output "sink_writer_service_account" {
+  description = "Dedicated Cloud Logging sink writer identity granted dataset-scoped roles/bigquery.dataEditor."
+  value       = module.observability_lakehouse.sink_writer_service_account
+}
+

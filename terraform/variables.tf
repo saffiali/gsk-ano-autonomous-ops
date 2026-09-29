@@ -27,6 +27,13 @@ variable "dataset_id" {
   default     = "gsk_ano_ops"
 }
 
+variable "observability_dataset_id" {
+  description = "BigQuery dataset ID hosting the GSK Enterprise Observability Lakehouse, BQML baselines, and ISO GQL Property Graph."
+  type        = string
+  default     = "gsk_observability_demo"
+}
+
+
 variable "log_sink_filter" {
   description = "Cloud Logging inclusion filter routing compute, application, database, and network telemetry."
   type        = string

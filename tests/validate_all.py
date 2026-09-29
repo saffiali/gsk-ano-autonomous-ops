@@ -33,12 +33,22 @@ This self-contained verification runner programmatically validates:
      and live incident seeder (`src/seed_live_demo.py`), interactive 4-Act CLI demo runner (`src/demo_runner.py`),
      executive web UI dashboard & REST API server (`src/demo_dashboard.py`), customer runbook documentation
      (`docs/CUSTOMER_DEMO_RUNBOOK.md`), and repository `git secrets` working tree safety.
+5. Suite 5 (`Round3ObservabilityPlatformSuite`):
+   - End-to-end validation of Round 3 GSK Enterprise Observability Platform & "Neuro" Conversational AI:
+     architecture blueprint (`docs/GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md`), OTel Collector config
+     (`config/otel-collector-config.yaml`), SQL/DDL/ISO GQL catalog (`sql/01`..`06`), Terraform submodule
+     (`terraform/modules/observability_lakehouse/`), PromQL `0.0`-preserving micro-batcher
+     (`src/promql_micro_batcher.py`), EBRS multi-stage cascading failure seeder (`src/seed_ebrs_observability.py`),
+     live GCP `gke-demos-363017.gsk_observability_demo` tables, `GRAPH_TABLE` traversal, TimesFM/BQML
+     anomaly detection (`scripts/deploy_observability_mvp.py`), and Interactive MVP Workbench & "Neuro"
+     REST APIs (`src/observability_mvp_server.py` & `src/demo_dashboard.py`).
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -49,6 +59,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -82,6 +93,7 @@ REQUIRED_SUBMODULES = [
     "bqml_analytics",
     "embedding_pipeline",
     "alerting_and_remediation",
+    "observability_lakehouse",
 ]
 
 CANONICAL_TABLES_SPEC: dict[str, dict[str, Any]] = {
@@ -1702,7 +1714,816 @@ class Round2LiveDemoAndDashboardSuite(unittest.TestCase):
             )
 
 
-def main() -> None:
+# ==============================================================================
+# SUITE 5: Round 3 GSK Enterprise Observability Platform & "Neuro" MVP Suite
+# ==============================================================================
+
+
+class Round3ObservabilityPlatformSuite(unittest.TestCase):
+  """Validates Round 3 Observability Architecture, OTel YAML, SQL/GQL Catalog, PromQL 0.0 Batcher, EBRS Seeder, Live GCP Dataset/Graph, and Neuro Workbench."""
+
+  def setUp(self) -> None:
+    self.temp_dir = tempfile.TemporaryDirectory()
+    self.temp_mirror_path = (
+        Path(self.temp_dir.name) / "gsk_observability_mvp_test.db"
+    )
+
+  def tearDown(self) -> None:
+    self.temp_dir.cleanup()
+
+  def test_5_1_architecture_blueprint_and_otel_config_validation(self) -> None:
+    """Validates docs/GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md (12 sections, Findings 1-6, Neuro prompt) and config/otel-collector-config.yaml."""
+    from src.observability_mvp_server import NEURO_SYSTEM_PROMPT
+
+    arch_doc = PROJECT_ROOT / "docs" / "GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md"
+    self.assertTrue(arch_doc.is_file(), f"Missing {arch_doc}")
+    arch_text = arch_doc.read_text(encoding="utf-8")
+    self.assertGreaterEqual(
+        len(arch_text),
+        50000,
+        "GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md should be comprehensive (>=50k chars)",
+    )
+
+    # Verify Executive Summary + all 12 numbered sections
+    self.assertIn("## Executive Summary", arch_text)
+    for sec_num in range(1, 13):
+      self.assertRegex(
+          arch_text,
+          rf"(?m)^##\s+{sec_num}\.",
+          f"Missing Section {sec_num} heading in GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md",
+      )
+
+    # Verify Findings 1-6 remediations, Mermaid diagrams, Live GCP target, and Neuro system prompt
+    for required_token in [
+        "gke-demos-363017",
+        "gsk_observability_demo",
+        "```mermaid",
+        "HORIZON = 10000",
+        "HOLIDAY_REGION = 'GB'",
+        "GAP_FILL(",
+        "ARIMA_PLUS_XREG",
+        "AI.DETECT_ANOMALIES",
+        "AI.FORECAST",
+        "CREATE OR REPLACE PROPERTY GRAPH",
+        "gsk_infrastructure_dependency_graph",
+        "gemini-2.5-flash",
+        "ML.GENERATE_TEXT",
+        "AI.GENERATE_TABLE",
+        "SILENT_HOST_DROP_TO_ZERO",
+        "SPIKE_ANOMALY",
+        "Finding 1",
+        "Finding 2",
+        "Finding 3",
+        "Finding 4",
+        "Finding 5",
+        "Finding 6",
+    ]:
+      self.assertIn(
+          required_token,
+          arch_text,
+          f"Missing required token '{required_token}' in GSK_OBSERVABILITY_PLATFORM_ARCHITECTURE.md",
+      )
+
+    self.assertIn(NEURO_SYSTEM_PROMPT.strip(), arch_text)
+    for broken_token in ["SeeVertex", "[w]", "[ew]", "'gemini-model-endpoint'"]:
+      self.assertNotIn(
+          broken_token,
+          arch_text.split("## 12.")[0],
+          f"Unremediated defect token '{broken_token}' found in main blueprint body",
+      )
+
+    # Verify config/otel-collector-config.yaml
+    otel_path = PROJECT_ROOT / "config" / "otel-collector-config.yaml"
+    self.assertTrue(otel_path.is_file(), f"Missing {otel_path}")
+    otel_text = otel_path.read_text(encoding="utf-8")
+
+    self.assertIn("127.0.0.1:9090", otel_text)
+    self.assertIn("localhost:8080", otel_text)
+    self.assertNotIn("0.0.0.0:9090", otel_text)
+    self.assertNotIn("googlemanagedprometheus", otel_text)
+    self.assertIn("telemetry.googleapis.com:443", otel_text)
+    self.assertIn("Pharma_Manufacturing", otel_text)
+    self.assertIn(
+        "processors: [memory_limiter, resourcedetection, batch]", otel_text
+    )
+    self.assertIn("exporters: [otlp, googlecloud]", otel_text)
+
+    try:
+      import yaml  # type: ignore
+
+      otel_cfg = yaml.safe_load(otel_text)
+      pipeline_metrics = otel_cfg["service"]["pipelines"]["metrics"]
+      self.assertEqual(
+          pipeline_metrics["processors"],
+          ["memory_limiter", "resourcedetection", "batch"],
+      )
+      self.assertEqual(
+          pipeline_metrics["processors"][0],
+          "memory_limiter",
+          "memory_limiter MUST execute first in the OTel metrics pipeline",
+      )
+      self.assertEqual(
+          pipeline_metrics["exporters"],
+          ["otlp", "googlecloud"],
+      )
+      scrape_targets = otel_cfg["receivers"]["prometheus"]["config"][
+          "scrape_configs"
+      ][0]["static_configs"][0]["targets"]
+      self.assertEqual(scrape_targets, ["127.0.0.1:9090", "localhost:8080"])
+    except ImportError:
+      pass
+
+  def test_5_2_sql_gql_script_catalog_and_observability_terraform_validation(
+      self,
+  ) -> None:
+    """Validates sql/01..06 catalog and terraform/modules/observability_lakehouse/main.tf (14 tables, 4 routines, dataset IAM)."""
+    from src.seed_ebrs_observability import REQUIRED_OBSERVABILITY_TABLES
+
+    sql_dir = PROJECT_ROOT / "sql"
+    expected_sql_files = {
+        "01_dataset_and_iam.sql": [
+            "CREATE SCHEMA IF NOT EXISTS",
+            "gke-demos-363017.gsk_observability_demo",
+            "GRANT `roles/bigquery.dataEditor`",
+            "ON SCHEMA",
+        ],
+        "02_ebrs_lakehouse_tables_ddl.sql": [
+            "enterprise_telemetry_partitioned",
+            "PARTITION BY DATE(timestamp)",
+            "CLUSTER BY site_location, system_id, application_tier, host_id",
+            "partition_expiration_days = 90",
+            "system_logs",
+            "servicenow_maintenance_windows",
+            "incident_root_cause_analysis",
+            "structured_log_entities",
+        ],
+        "03_bqml_arima_and_timesfm_baselines.sql": [
+            "dense_minute_telemetry_view",
+            "GAP_FILL(",
+            "COALESCE(cpu_usage, 0.0)",
+            "host_cpu_arima_model",
+            "MODEL_TYPE = 'ARIMA_PLUS'",
+            "HORIZON = 10000",
+            "HOLIDAY_REGION = 'GB'",
+            "TIME_SERIES_ID_COL = 'hostname'",
+            "host_cpu_arimax_model",
+            "MODEL_TYPE = 'ARIMA_PLUS_XREG'",
+            "servicenow_maintenance_windows",
+            "composite_host_signals_arima",
+            "TIME_SERIES_ID_COL = ['hostname', 'metric_name']",
+            "ML.DETECT_ANOMALIES",
+            "SPIKE_ANOMALY",
+            "SILENT_HOST_DROP_TO_ZERO",
+            "DIP_ANOMALY",
+            "AI.DETECT_ANOMALIES",
+            "AI.FORECAST",
+        ],
+        "04_metric_to_log_correlation.sql": [
+            "enterprise_telemetry_partitioned",
+            "system_logs",
+            "INTERVAL 5 MINUTE",
+            "STRING_AGG(l.message",
+            "correlated_error_traces",
+        ],
+        "05_iso_gql_property_graph.sql": [
+            "nodes_switches",
+            "nodes_hypervisors",
+            "nodes_hosts",
+            "nodes_applications",
+            "edges_connected_to",
+            "edges_hosts_vm",
+            "edges_runs_app",
+            "edges_app_communicates",
+            "edges_network_flows",
+            "CREATE OR REPLACE PROPERTY GRAPH",
+            "gsk_infrastructure_dependency_graph",
+            "LABEL Switch",
+            "LABEL Hypervisor",
+            "LABEL Host",
+            "LABEL Application",
+            "GRAPH_TABLE(",
+            "src.hostname AS src_host",
+            "dst.hostname AS dst_host",
+            "JSON_OBJECT(",
+        ],
+        "06_gemini_2_5_flash_synthesis.sql": [
+            "gemini_2_5_flash",
+            "ENDPOINT = 'gemini-2.5-flash'",
+            "ML.GENERATE_TEXT",
+            "incident_root_cause_analysis",
+            "AI.GENERATE_TABLE",
+            "structured_log_entities",
+            "root_cause_category STRING, failed_component STRING, error_code STRING, recommended_action STRING, confidence_score FLOAT64",
+        ],
+    }
+
+    for fname, tokens in expected_sql_files.items():
+      fpath = sql_dir / fname
+      self.assertTrue(fpath.is_file(), f"Missing SQL catalog file {fpath}")
+      sql_text = fpath.read_text(encoding="utf-8")
+      for tok in tokens:
+        self.assertIn(tok, sql_text, f"Missing '{tok}' in {fpath}")
+      self.assertNotIn("TO_JSON(src)", sql_text)
+      self.assertNotIn("'gemini-model-endpoint'", sql_text)
+
+    # Validate terraform/modules/observability_lakehouse/main.tf
+    obs_tf_path = (
+        TERRAFORM_DIR / "modules" / "observability_lakehouse" / "main.tf"
+    )
+    self.assertTrue(obs_tf_path.is_file(), f"Missing {obs_tf_path}")
+    obs_tf_text = obs_tf_path.read_text(encoding="utf-8")
+    obs_blocks = extract_hcl_blocks(obs_tf_text)
+
+    resources_by_type_name: dict[tuple[str, str], str] = {}
+    obs_tables_schemas: dict[str, list[dict[str, Any]]] = {}
+    obs_routines: dict[str, str] = {}
+
+    for b in obs_blocks:
+      if b["type"] == "resource":
+        resources_by_type_name[(b["label1"], b["label2"])] = b["body"]
+        if b["label1"] == "google_bigquery_table":
+          hd = re.search(
+              r"schema\s*=\s*<<-?EOF\s*\n(.*?)\n\s*EOF", b["body"], re.DOTALL
+          )
+          self.assertIsNotNone(
+              hd, f"Missing JSON schema heredoc in table {b['label2']}"
+          )
+          obs_tables_schemas[b["label2"]] = json.loads(hd.group(1))
+        elif b["label1"] == "google_bigquery_routine":
+          hd = re.search(
+              r"definition_body\s*=\s*<<-?EOF\s*\n(.*?)\n\s*EOF",
+              b["body"],
+              re.DOTALL,
+          )
+          self.assertIsNotNone(
+              hd, f"Missing definition_body heredoc in routine {b['label2']}"
+          )
+          obs_routines[b["label2"]] = hd.group(1)
+
+    # Verify dataset, sink, and dataset-scoped IAM
+    self.assertIn(
+        ("google_bigquery_dataset", "gsk_observability_demo"),
+        resources_by_type_name,
+    )
+    self.assertIn(
+        ("google_logging_project_sink", "gsk_bq_telemetry_sink"),
+        resources_by_type_name,
+    )
+    sink_body = resources_by_type_name[
+        ("google_logging_project_sink", "gsk_bq_telemetry_sink")
+    ]
+    self.assertIn("unique_writer_identity = true", sink_body)
+    self.assertIn("use_partitioned_tables = true", sink_body)
+
+    self.assertIn(
+        ("google_bigquery_dataset_iam_member", "sink_dataset_writer"),
+        resources_by_type_name,
+    )
+    iam_body = resources_by_type_name[
+        ("google_bigquery_dataset_iam_member", "sink_dataset_writer")
+    ]
+    self.assertIn('role       = "roles/bigquery.dataEditor"', iam_body)
+    self.assertIn(
+        "google_logging_project_sink.gsk_bq_telemetry_sink.writer_identity",
+        iam_body,
+    )
+
+    # Verify all 14 tables exist in observability_lakehouse/main.tf with valid JSON schemas
+    self.assertEqual(
+        set(obs_tables_schemas.keys()),
+        set(REQUIRED_OBSERVABILITY_TABLES),
+        "observability_lakehouse/main.tf must define all 14 required tables",
+    )
+    etp_body = resources_by_type_name[
+        ("google_bigquery_table", "enterprise_telemetry_partitioned")
+    ]
+    self.assertIn(
+        'clustering = ["site_location", "system_id", "application_tier", "host_id"]',
+        etp_body,
+    )
+    self.assertIn("expiration_ms = 7776000000", etp_body)
+
+    # Verify all 4 routines in observability_lakehouse/main.tf
+    expected_routines = {
+        "deploy_property_graph_gql",
+        "train_host_cpu_arima_model",
+        "train_host_cpu_arimax_model",
+        "train_composite_host_signals_arima",
+    }
+    self.assertEqual(set(obs_routines.keys()), expected_routines)
+    self.assertIn(
+        "CREATE OR REPLACE PROPERTY GRAPH",
+        obs_routines["deploy_property_graph_gql"],
+    )
+    self.assertIn(
+        "HORIZON = 10000", obs_routines["train_host_cpu_arima_model"]
+    )
+    self.assertIn(
+        "HOLIDAY_REGION = 'GB'", obs_routines["train_host_cpu_arima_model"]
+    )
+    self.assertIn("GAP_FILL(", obs_routines["train_host_cpu_arima_model"])
+    self.assertIn(
+        "ARIMA_PLUS_XREG", obs_routines["train_host_cpu_arimax_model"]
+    )
+
+  def test_5_3_promql_micro_batcher_zero_float_and_boundary_cases(self) -> None:
+    """Unit-tests src/promql_micro_batcher.py across all 0.0 float edge cases and matrix batch ingestion."""
+    from src.promql_micro_batcher import (
+        compute_aligned_window,
+        extract_metric_float,
+        fetch_and_ingest_metrics,
+        parse_promql_matrix_response,
+    )
+
+    # 1. Verify zero values are deterministically preserved as 0.0 (positive sign)
+    for zero_in in [0, 0.0, -0.0, "0", "0.0", "-0.0", "0.0000", " 0.0 "]:
+      val = extract_metric_float(zero_in)
+      self.assertIsInstance(val, float)
+      self.assertEqual(val, 0.0)
+      self.assertEqual(
+          math.copysign(1.0, val),
+          1.0,
+          f"Input {zero_in!r} produced negative zero (-0.0)",
+      )
+
+    # 2. Verify invalid / null / NaN / Inf / boolean inputs safely coerce to 0.0 without throwing
+    for bad_in in [
+        None,
+        "",
+        "   ",
+        "null",
+        "None",
+        "NaN",
+        "nan",
+        float("nan"),
+        "Inf",
+        "-Inf",
+        "infinity",
+        float("inf"),
+        float("-inf"),
+        True,
+        False,
+        "not_a_float",
+        [],
+        {},
+        object(),
+    ]:
+      val = extract_metric_float(bad_in)
+      self.assertIsInstance(val, float)
+      self.assertEqual(val, 0.0, f"Failed safe 0.0 fallback for {bad_in!r}")
+
+    # 3. Verify non-zero valid floats
+    self.assertAlmostEqual(extract_metric_float("98.8"), 98.8)
+    self.assertAlmostEqual(extract_metric_float(545), 545.0)
+    self.assertAlmostEqual(extract_metric_float("1e-4"), 0.0001)
+
+    # 4. Verify 60s epoch window alignment
+    start_ep, end_ep, step_str = compute_aligned_window(
+        now_epoch=1790700147.8, window_seconds=300, step_seconds=60
+    )
+    self.assertEqual(end_ep, 1790700120)
+    self.assertEqual(start_ep, 1790699820)
+    self.assertEqual(step_str, "60s")
+
+    # 5. Verify multi-metric matrix merging preserves 0.0 for silent host drops
+    cpu_payload = {
+        "status": "success",
+        "data": {
+            "resultType": "matrix",
+            "result": [
+                {
+                    "metric": {
+                        "host_name": "srv-c-batch-03",
+                        "site_location": "Site_C_Ware",
+                        "system_id": "MES_BATCH",
+                        "application_tier": "Batch_Processing",
+                    },
+                    "values": [[1790700060, "0"], [1790700120, "0.0"]],
+                },
+                {
+                    "metric": {
+                        "host_name": "srv-b-batch-02",
+                        "site_location": "Site_B_Stevenage",
+                        "system_id": "EBRS",
+                        "application_tier": "Batch_Processing",
+                    },
+                    "values": [[1790700120, "94.5"]],
+                },
+            ],
+        },
+    }
+    mem_payload = {
+        "status": "success",
+        "data": {
+            "resultType": "matrix",
+            "result": [
+                {
+                    "metric": {"host_name": "srv-c-batch-03"},
+                    "values": [[1790700060, "0.0"], [1790700120, "NaN"]],
+                },
+                {
+                    "metric": {"host_name": "srv-b-batch-02"},
+                    "values": [[1790700120, "98.8"]],
+                },
+            ],
+        },
+    }
+
+    records = parse_promql_matrix_response("cpu_usage_pct", cpu_payload)
+    records = parse_promql_matrix_response(
+        "memory_usage_pct", mem_payload, host_records=records
+    )
+    self.assertEqual(len(records), 3)
+    silent_row = records[("srv-c-batch-03", 1790700120)]
+    self.assertIsNotNone(silent_row["cpu_usage_pct"])
+    self.assertEqual(silent_row["cpu_usage_pct"], 0.0)
+    self.assertEqual(silent_row["memory_usage_pct"], 0.0)
+    anom_row = records[("srv-b-batch-02", 1790700120)]
+    self.assertEqual(anom_row["cpu_usage_pct"], 94.5)
+    self.assertEqual(anom_row["memory_usage_pct"], 98.8)
+    self.assertEqual(anom_row["status"], "ANOMALY")
+
+    # 6. Verify end-to-end fetch_and_ingest_metrics with mock session & inserter
+    captured_inserts: list[tuple[str, list[dict[str, Any]]]] = []
+
+    def mock_get(url: str, params: dict[str, str]) -> Any:
+      if "cpu" in params.get("query", ""):
+        return MockResponse(cpu_payload)
+      return MockResponse(mem_payload)
+
+    def mock_bq_inserter(
+        table_ref: str, rows: list[dict[str, Any]]
+    ) -> list[Any]:
+      captured_inserts.append((table_ref, rows))
+      return []
+
+    ingested = fetch_and_ingest_metrics(
+        project_id="gke-demos-363017",
+        dataset_id="gsk_observability_demo",
+        table_id="enterprise_telemetry_partitioned",
+        session=mock_get,
+        bq_inserter=mock_bq_inserter,
+        now_epoch=1790700125.0,
+    )
+    self.assertEqual(len(ingested), 3)
+    self.assertEqual(len(captured_inserts), 1)
+    self.assertEqual(
+        captured_inserts[0][0],
+        "gke-demos-363017.gsk_observability_demo.enterprise_telemetry_partitioned",
+    )
+
+    # Also run CLI --self-test
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "src" / "promql_micro_batcher.py"),
+            "--self-test",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    self.assertEqual(proc.returncode, 0, f"promql_micro_batcher --self-test failed:\n{proc.stderr}")
+    self.assertIn('"status": "PASSED"', proc.stdout)
+
+  def test_5_4_ebrs_cascading_seeder_and_sqlite_mirror_parity(self) -> None:
+    """Tests src/seed_ebrs_observability.py against a temporary SQLite mirror across all 14 tables and Scenarios A, B, C."""
+    from src.seed_ebrs_observability import (
+        REQUIRED_OBSERVABILITY_TABLES,
+        seed_ebrs_observability,
+    )
+
+    summary = seed_ebrs_observability(
+        project_id="gke-demos-363017",
+        dataset_id="gsk_observability_demo",
+        mirror_path=self.temp_mirror_path,
+        seed_live_bq=False,
+    )
+    self.assertTrue(self.temp_mirror_path.exists())
+    sqlite_counts = summary["sqlite_table_counts"]
+    for tbl in REQUIRED_OBSERVABILITY_TABLES:
+      self.assertIn(tbl, sqlite_counts)
+      self.assertGreater(
+          sqlite_counts[tbl], 0, f"Expected >0 rows in SQLite mirror table {tbl}"
+      )
+
+    conn = sqlite3.connect(str(self.temp_mirror_path))
+    cur = conn.cursor()
+
+    # Verify multi-site & system coverage
+    cur.execute("SELECT DISTINCT site_location FROM enterprise_telemetry_partitioned")
+    sites = {r[0] for r in cur.fetchall()}
+    self.assertEqual(sites, {"Site_A_London", "Site_B_Stevenage", "Site_C_Ware"})
+
+    cur.execute("SELECT DISTINCT system_id FROM enterprise_telemetry_partitioned")
+    systems = {r[0] for r in cur.fetchall()}
+    self.assertEqual(systems, {"EBRS", "LIMS", "MES_BATCH"})
+
+    # Scenario A: srv-b-batch-02 memory creep up to 98.8% + OutOfMemoryError log
+    cur.execute(
+        "SELECT MAX(memory_usage_pct) FROM enterprise_telemetry_partitioned WHERE hostname = 'srv-b-batch-02'"
+    )
+    self.assertAlmostEqual(cur.fetchone()[0], 98.8, places=1)
+    cur.execute(
+        "SELECT message FROM system_logs WHERE hostname = 'srv-b-batch-02' AND severity = 'FATAL'"
+    )
+    fatal_logs = [r[0] for r in cur.fetchall()]
+    self.assertTrue(
+        any("java.lang.OutOfMemoryError" in m for m in fatal_logs),
+        f"Missing OutOfMemoryError log for srv-b-batch-02: {fatal_logs}",
+    )
+
+    # Scenario B: srv-b-db-01 500/500 pool exhaustion cascading to srv-a-web-01 / srv-a-web-04 HTTP 504
+    cur.execute(
+        "SELECT MAX(active_connections) FROM enterprise_telemetry_partitioned WHERE hostname = 'srv-b-db-01'"
+    )
+    self.assertEqual(cur.fetchone()[0], 500)
+    cur.execute(
+        "SELECT message FROM system_logs WHERE hostname IN ('srv-a-web-01', 'srv-a-web-04')"
+    )
+    web_logs = [r[0] for r in cur.fetchall()]
+    self.assertTrue(any("HTTP 504 Gateway Timeout" in m for m in web_logs))
+
+    # Scenario C: srv-c-batch-03 /mnt/gsk_batch IO wait >940ms
+    cur.execute(
+        "SELECT MAX(io_wait_ms) FROM enterprise_telemetry_partitioned WHERE hostname = 'srv-c-batch-03'"
+    )
+    self.assertGreater(cur.fetchone()[0], 940.0)
+    cur.execute(
+        "SELECT message FROM system_logs WHERE hostname = 'srv-c-batch-03'"
+    )
+    c_logs = [r[0] for r in cur.fetchall()]
+    self.assertTrue(any("/mnt/gsk_batch" in m for m in c_logs))
+
+    # ServiceNow maintenance windows CHG0049281 & CHG0051024
+    cur.execute("SELECT change_id, is_maintenance_window FROM servicenow_maintenance_windows")
+    maint = dict(cur.fetchall())
+    self.assertEqual(maint.get("CHG0049281"), 1)
+    self.assertEqual(maint.get("CHG0051024"), 1)
+
+    conn.close()
+
+  def test_5_5_live_gcp_bigquery_tables_property_graph_and_cascading_queries(
+      self,
+  ) -> None:
+    """Verifies live GCP gke-demos-363017.gsk_observability_demo tables, ISO GQL Property Graph traversal, correlation, and TimesFM."""
+    from scripts.deploy_observability_mvp import verify_live_observability_mvp
+    from src.seed_ebrs_observability import (
+        REQUIRED_OBSERVABILITY_TABLES,
+        _get_bq_access_token,
+    )
+
+    token = _get_bq_access_token()
+    self.assertTrue(
+        bool(token),
+        "Expected active GCP credentials for live gke-demos-363017 verification",
+    )
+
+    report = verify_live_observability_mvp(
+        project_id="gke-demos-363017",
+        dataset_id="gsk_observability_demo",
+        location="EU",
+    )
+    self.assertEqual(report["verification_status"], "PASSED")
+
+    # 1. Verify all 14 live BigQuery tables exist and have COUNT(*) > 0
+    live_counts = report["live_table_counts"]
+    for tbl in REQUIRED_OBSERVABILITY_TABLES:
+      self.assertIn(tbl, live_counts, f"Table {tbl} missing from live BigQuery")
+      self.assertGreater(
+          live_counts[tbl],
+          0,
+          f"Live BigQuery table gke-demos-363017.gsk_observability_demo.{tbl} has 0 rows",
+      )
+
+    # 2. Verify live ISO GQL GRAPH_TABLE traversal (Switch -> Hypervisor -> Host -> Application)
+    gql_rows = report["gql_fullstack_rows"]
+    self.assertGreaterEqual(len(gql_rows), 4)
+    switches = {r["failing_switch"] for r in gql_rows}
+    hypervisors = {r["impacted_hypervisor"] for r in gql_rows}
+    vms = {r["impacted_vm"] for r in gql_rows}
+    self.assertIn("sw-core-stv-01", switches)
+    self.assertIn("esxi-cluster-04", hypervisors)
+    self.assertIn("srv-b-batch-02", vms)
+    self.assertIn("srv-b-db-01", vms)
+
+    # Verify Host-to-Host GRAPH_TABLE JSON visualization output
+    flow_json = report["gql_host_flow_json"]
+    self.assertGreater(flow_json.get("total_dependency_paths", 0), 0)
+    self.assertIn("srv-b-db-01", flow_json.get("nodes", []))
+
+    # 3. Verify live 5-minute metric-to-log temporal correlation across Scenarios A, B, C
+    corr_rows = report["correlated_anomalies"]
+    corr_by_host = {r["hostname"]: r for r in corr_rows}
+    for host in [
+        "srv-b-batch-02",
+        "srv-b-db-01",
+        "srv-a-web-01",
+        "srv-a-web-04",
+        "srv-c-batch-03",
+    ]:
+      self.assertIn(host, corr_by_host)
+      self.assertTrue(
+          bool(corr_by_host[host].get("correlated_error_traces")),
+          f"Missing correlated error traces for {host} in live BigQuery",
+      )
+
+    # 4. Verify live TimesFM 2.5 AI.DETECT_ANOMALIES & AI.FORECAST
+    self.assertGreater(report["timesfm_detected_anomalies_count"], 0)
+    classifications = {
+        r["anomaly_classification"]
+        for r in report["timesfm_detected_anomalies_sample"]
+    }
+    self.assertTrue(
+        "SILENT_HOST_DROP_TO_ZERO" in classifications
+        or "SPIKE_ANOMALY" in classifications
+    )
+    self.assertGreater(len(report["timesfm_forecast_sample"]), 0)
+
+  def test_5_6_interactive_mvp_workbench_and_neuro_conversational_ai(
+      self,
+  ) -> None:
+    """Starts create_observability_mvp_server and create_dashboard_server and tests all /api/observability/* and /api/neuro/chat endpoints."""
+    from src.demo_dashboard import create_dashboard_server
+    from src.observability_mvp_server import (
+        NEURO_SYSTEM_PROMPT,
+        create_observability_mvp_server,
+    )
+    from src.seed_ebrs_observability import REQUIRED_OBSERVABILITY_TABLES
+
+    mvp_server = create_observability_mvp_server(
+        host="127.0.0.1",
+        port=0,
+        project_id="gke-demos-363017",
+        dataset_id="gsk_observability_demo",
+        mirror_path=str(self.temp_mirror_path),
+    )
+    dash_server = create_dashboard_server(
+        host="127.0.0.1",
+        port=0,
+        project_id="gke-demos-363017",
+        mirror_path=str(self.temp_mirror_path),
+    )
+    mvp_port = mvp_server.server_address[1]
+    dash_port = dash_server.server_address[1]
+
+    t1 = threading.Thread(target=mvp_server.serve_forever, daemon=True)
+    t2 = threading.Thread(target=dash_server.serve_forever, daemon=True)
+    t1.start()
+    t2.start()
+
+    try:
+      for base_url in [
+          f"http://127.0.0.1:{mvp_port}",
+          f"http://127.0.0.1:{dash_port}",
+      ]:
+        # 1. Verify HTML Workbench UI (GET /)
+        with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+          self.assertEqual(resp.status, 200)
+          html = resp.read().decode("utf-8")
+          self.assertIn("Neuro", html)
+          self.assertIn("gsk_infrastructure_dependency_graph", html)
+          self.assertIn("SILENT_HOST_DROP_TO_ZERO", html)
+
+        # 2. Verify GET /api/observability/status
+        with urllib.request.urlopen(
+            f"{base_url}/api/observability/status", timeout=5
+        ) as resp:
+          self.assertEqual(resp.status, 200)
+          st = json.loads(resp.read().decode("utf-8"))
+          self.assertEqual(st["status"], "HEALTHY")
+          self.assertEqual(st["project_id"], "gke-demos-363017")
+          self.assertEqual(st["dataset_id"], "gsk_observability_demo")
+          self.assertEqual(
+              st["property_graph"], "gsk_infrastructure_dependency_graph"
+          )
+          for tbl in REQUIRED_OBSERVABILITY_TABLES:
+            self.assertGreater(st["table_counts"].get(tbl, 0), 0)
+
+        # 3. Verify GET /api/observability/anomalies & query filters
+        with urllib.request.urlopen(
+            f"{base_url}/api/observability/anomalies", timeout=5
+        ) as resp:
+          self.assertEqual(resp.status, 200)
+          anom = json.loads(resp.read().decode("utf-8"))
+          self.assertEqual(anom["model_metadata"]["horizon"], 10000)
+          self.assertEqual(anom["model_metadata"]["holiday_region"], "GB")
+          cls_set = {pt["anomaly_classification"] for pt in anom["anomalies"]}
+          self.assertIn("SPIKE_ANOMALY", cls_set)
+          self.assertIn("SILENT_HOST_DROP_TO_ZERO", cls_set)
+          self.assertIn("SUPPRESSED_MAINTENANCE_WINDOW", cls_set)
+
+        with urllib.request.urlopen(
+            f"{base_url}/api/observability/anomalies?classification=SILENT_HOST_DROP_TO_ZERO",
+            timeout=5,
+        ) as resp:
+          filtered = json.loads(resp.read().decode("utf-8"))
+          self.assertGreater(len(filtered["anomalies"]), 0)
+          for pt in filtered["anomalies"]:
+            self.assertEqual(
+                pt["anomaly_classification"], "SILENT_HOST_DROP_TO_ZERO"
+            )
+            self.assertEqual(pt["actual_cpu"], 0.0)
+
+        # 4. Verify GET /api/observability/topology
+        with urllib.request.urlopen(
+            f"{base_url}/api/observability/topology", timeout=5
+        ) as resp:
+          self.assertEqual(resp.status, 200)
+          topo = json.loads(resp.read().decode("utf-8"))
+          node_ids = {n["id"] for n in topo["nodes"]}
+          self.assertIn("sw-core-stv-01", node_ids)
+          self.assertIn("esxi-cluster-04", node_ids)
+          self.assertIn("srv-b-batch-02", node_ids)
+          self.assertIn("srv-b-db-01", node_ids)
+          self.assertGreaterEqual(len(topo["graph_table_paths"]), 3)
+
+        # 5. Verify GET & POST /api/observability/scenarios/<A|B|C> and negative 400 test
+        for scen_id in ["A", "B", "C"]:
+          req = urllib.request.Request(
+              f"{base_url}/api/observability/scenarios/{scen_id}",
+              data=b"{}",
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=5) as resp:
+            self.assertEqual(resp.status, 200)
+            s_data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(s_data["scenario_id"], scen_id)
+            self.assertGreaterEqual(len(s_data["scenario"]["stages"]), 2)
+            self.assertTrue(
+                bool(
+                    s_data["scenario"]["incident_root_cause_analysis"][
+                        "gemini_root_cause_analysis"
+                    ]
+                )
+            )
+
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+          urllib.request.urlopen(
+              f"{base_url}/api/observability/scenarios/INVALID_SCENARIO",
+              timeout=5,
+          )
+        self.assertEqual(ctx.exception.code, 400)
+
+        # 6. Verify POST /api/neuro/chat across SQL, ISO GQL, maintenance suppression, and boundary prompts
+        prompts_and_expected = [
+            (
+                "What active service degradation is occurring in the last 60 minutes?",
+                "SQL",
+                "enterprise_telemetry_partitioned",
+            ),
+            (
+                "Trace the ISO GQL blast radius for PostgreSQL 500/500 database saturation and upstream HTTP 504 timeouts",
+                "ISO_GQL",
+                "GRAPH_TABLE",
+            ),
+            (
+                "Investigate silent host drop to 0.0 and /mnt/gsk_batch storage IO wait in Site_C_Ware",
+                "SQL",
+                "SILENT_HOST_DROP_TO_ZERO",
+            ),
+            (
+                "Is CHG0049281 suppressed by ServiceNow maintenance window?",
+                "SQL",
+                "servicenow_maintenance_windows",
+            ),
+            (
+                "Why did srv-b-batch-02 crash with OutOfMemoryError?",
+                "SQL",
+                "system_logs",
+            ),
+            (
+                "",
+                "SQL",
+                "enterprise_telemetry_partitioned",
+            ),
+        ]
+        for question, expected_qtype, expected_query_substr in prompts_and_expected:
+          req = urllib.request.Request(
+              f"{base_url}/api/neuro/chat",
+              data=json.dumps({"question": question}).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=5) as resp:
+            self.assertEqual(resp.status, 200)
+            chat_res = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(
+                chat_res["system_prompt"].strip(), NEURO_SYSTEM_PROMPT.strip()
+            )
+            self.assertEqual(chat_res["query_type"], expected_qtype)
+            self.assertIn(expected_query_substr, chat_res["generated_query"])
+            self.assertIn("hostname", chat_res["executive_summary"])
+            self.assertIn("remediation_runbook", chat_res["executive_summary"])
+    finally:
+      mvp_server.shutdown()
+      mvp_server.server_close()
+      dash_server.shutdown()
+      dash_server.server_close()
+
+
+def run_all_validations() -> None:
   """Executes all validation suites and prints a formatted summary report."""
   print("=" * 80)
   print("GSK AUTONOMOUS OPERATIONS (ANO) — AUTOMATED VERIFICATION SUITE")
@@ -1714,6 +2535,7 @@ def main() -> None:
   suite.addTests(loader.loadTestsFromTestCase(SQLSchemaValidationSuite))
   suite.addTests(loader.loadTestsFromTestCase(PythonPipelineUnitTestSuite))
   suite.addTests(loader.loadTestsFromTestCase(Round2LiveDemoAndDashboardSuite))
+  suite.addTests(loader.loadTestsFromTestCase(Round3ObservabilityPlatformSuite))
 
   runner = unittest.TextTestRunner(verbosity=2)
   result = runner.run(suite)
@@ -1735,6 +2557,11 @@ def main() -> None:
   if not result.wasSuccessful():
     sys.exit(1)
   sys.exit(0)
+
+
+def main() -> None:
+  """CLI entrypoint."""
+  run_all_validations()
 
 
 if __name__ == "__main__":

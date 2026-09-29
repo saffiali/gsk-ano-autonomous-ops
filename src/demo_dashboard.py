@@ -23,13 +23,14 @@ import sqlite3
 import sys
 import threading
 from typing import Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
   sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.demo_runner import DemoExecutionEngine
+from src.observability_mvp_server import NEURO_SYSTEM_PROMPT, ObservabilityMVPState
 
 
 DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -421,6 +422,122 @@ FROM VECTOR_SEARCH(
       </div>
     </section>
 
+    <!-- PANEL 5: ROUND 3 DYNAMIC CONFIDENCE BAND & ANOMALY EXPLORER (gsk_observability_demo) -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-xl p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div>
+          <h3 class="text-sm font-bold uppercase tracking-wider text-cyan-400">
+            Panel 5 — Dynamic Confidence Band &amp; Anomaly Explorer (`gsk_observability_demo` — `ARIMA_PLUS` / `ARIMA_PLUS_XREG` / `GAP_FILL`)
+          </h3>
+          <p class="text-xs text-slate-400">
+            Visualizing <span class="font-mono text-slate-200">actual_cpu</span> vs <span class="font-mono text-slate-200">expected_lower_bound / expected_upper_bound</span> (`HORIZON = 10000`, `HOLIDAY_REGION = 'GB'`, `TIME_SERIES_ID_COL = 'hostname'`)
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+          <span class="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">SPIKE_ANOMALY (srv-b-batch-02: 94.5%)</span>
+          <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">SILENT_HOST_DROP_TO_ZERO (srv-c-ware-01: 0.0%)</span>
+          <span class="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">DIP_ANOMALY (srv-a-web-04: 8.5%)</span>
+          <span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">SUPPRESSED_MAINTENANCE_WINDOW (CHG0049281)</span>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs font-mono">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-400 bg-slate-950/60">
+              <th class="py-2 px-3">HOSTNAME</th>
+              <th class="py-2 px-3">SITE / SYSTEM</th>
+              <th class="py-2 px-3">ACTUAL_CPU</th>
+              <th class="py-2 px-3">EXPECTED_BOUNDS</th>
+              <th class="py-2 px-3">ANOMALY_PROB</th>
+              <th class="py-2 px-3">ANOMALY_CLASSIFICATION</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/70">
+            <tr>
+              <td class="py-2 px-3 font-bold text-rose-300">srv-b-batch-02</td>
+              <td class="py-2 px-3">Site_B_Stevenage / EBRS</td>
+              <td class="py-2 px-3 text-rose-400 font-bold">94.5%</td>
+              <td class="py-2 px-3">[39.0%, 68.5%]</td>
+              <td class="py-2 px-3">0.9940</td>
+              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700">SPIKE_ANOMALY</span></td>
+            </tr>
+            <tr>
+              <td class="py-2 px-3 font-bold text-amber-300">srv-c-ware-01</td>
+              <td class="py-2 px-3">Site_C_Ware / MES_BATCH</td>
+              <td class="py-2 px-3 text-amber-400 font-bold">0.0% (GAP_FILL)</td>
+              <td class="py-2 px-3">[32.5%, 64.0%]</td>
+              <td class="py-2 px-3">0.9980</td>
+              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">SILENT_HOST_DROP_TO_ZERO</span></td>
+            </tr>
+            <tr>
+              <td class="py-2 px-3 font-bold text-purple-300">srv-a-web-04</td>
+              <td class="py-2 px-3">Site_A_London / EBRS</td>
+              <td class="py-2 px-3 text-purple-300 font-bold">8.5%</td>
+              <td class="py-2 px-3">[28.0%, 62.0%]</td>
+              <td class="py-2 px-3">0.9120</td>
+              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700">DIP_ANOMALY</span></td>
+            </tr>
+            <tr>
+              <td class="py-2 px-3 font-bold text-cyan-300">ora-db-stv-01</td>
+              <td class="py-2 px-3">Site_B_Stevenage / LIMS</td>
+              <td class="py-2 px-3 text-cyan-300 font-bold">88.4%</td>
+              <td class="py-2 px-3">[35.0%, 89.5%] (XREG)</td>
+              <td class="py-2 px-3">0.1420</td>
+              <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700">SUPPRESSED_MAINTENANCE_WINDOW (CHG0049281)</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PANEL 6 & PANEL 7: FULL-STACK ISO GQL TOPOLOGY VISUALIZER & GSK "NEURO" CONVERSATIONAL AI ASSISTANT -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- PANEL 6: FULL-STACK ISO GQL PROPERTY GRAPH & CASCADING SCENARIOS A, B, C (6 COLS) -->
+      <section class="lg:col-span-6 bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-bold uppercase tracking-wider text-purple-400">
+              Panel 6 — Full-Stack ISO GQL Topology Visualizer (`gsk_infrastructure_dependency_graph`)
+            </h3>
+            <p class="text-xs text-slate-400 font-mono">
+              (Switch: sw-core-stv-01)-[:CONNECTED_TO]-&gt;(Hypervisor: esxi-cluster-04)-[:HOSTS]-&gt;(Host)-[:RUNS]-&gt;(Application)
+            </p>
+          </div>
+          <div class="flex gap-1.5">
+            <button onclick="loadObservabilityScenario('A')" class="px-2.5 py-1 rounded text-xs font-semibold bg-rose-950 text-rose-200 border border-rose-700 cursor-pointer">Scenario A (JVM OOM)</button>
+            <button onclick="loadObservabilityScenario('B')" class="px-2.5 py-1 rounded text-xs font-semibold bg-amber-950 text-amber-200 border border-amber-700 cursor-pointer">Scenario B (PG 500/500)</button>
+            <button onclick="loadObservabilityScenario('C')" class="px-2.5 py-1 rounded text-xs font-semibold bg-cyan-950 text-cyan-200 border border-cyan-700 cursor-pointer">Scenario C (/mnt/gsk_batch 0.0)</button>
+          </div>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-purple-200 space-y-1">
+          <div><strong class="text-cyan-300">Switch:</strong> sw-core-stv-01 &rarr; <strong class="text-purple-300">Hypervisor:</strong> esxi-cluster-04 &rarr; <strong class="text-rose-300">Host:</strong> srv-b-batch-02 / srv-b-db-01 &rarr; <strong class="text-emerald-300">Application:</strong> EBRS-Batch-Engine / EBRS-Database-Core &larr; EBRS-Web-Portal (srv-a-web-01, srv-a-web-04)</div>
+          <div><strong class="text-amber-300">Storage Cascade:</strong> sw-core-ware-01 &rarr; aks-prod-ware-02 &rarr; srv-c-ware-01 (/mnt/gsk_batch io_wait &gt; 940ms &rarr; 0.0) &rarr; MES-Batch-Scheduler</div>
+        </div>
+        <pre id="observability-scenario-box" class="bg-slate-950 border border-slate-800 rounded p-3 text-[11px] font-mono text-slate-200 overflow-x-auto max-h-56 whitespace-pre-wrap">Click Scenario A, B, or C to inspect 5-minute correlated logs, Gemini 2.5 Flash 3-sentence SRE RCA, and AI.GENERATE_TABLE entities.</pre>
+      </section>
+
+      <!-- PANEL 7: GSK "NEURO" CONVERSATIONAL AI ASSISTANT (6 COLS) -->
+      <section class="lg:col-span-6 bg-slate-900/90 border border-slate-800 rounded-xl p-5 space-y-3">
+        <div>
+          <h3 class="text-sm font-bold uppercase tracking-wider text-emerald-400">
+            Panel 7 — GSK "Neuro" Conversational AI Assistant (`/api/neuro/chat`)
+          </h3>
+          <p class="text-xs text-slate-400">
+            Translates SRE natural-language questions into verified BigQuery SQL &amp; ISO GQL `GRAPH_TABLE` queries
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <input id="neuro-chat-input" type="text"
+            value="Trace the ISO GQL blast radius for PostgreSQL 500/500 exhaustion and upstream HTTP 504 timeouts"
+            class="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-white" />
+          <button onclick="sendNeuroChat()" class="px-3.5 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold cursor-pointer">
+            Ask Neuro
+          </button>
+        </div>
+        <pre id="neuro-chat-output" class="bg-slate-950 border border-slate-800 rounded p-3 text-[11px] font-mono text-emerald-200 overflow-x-auto max-h-60 whitespace-pre-wrap">GSK "Neuro" AI Infrastructure Observability Assistant ready (`enterprise_telemetry_partitioned` &amp; `gsk_infrastructure_dependency_graph`).</pre>
+      </section>
+    </div>
+
   </main>
 
   <script>
@@ -448,6 +565,31 @@ FROM VECTOR_SEARCH(
         console.error('Error triggering Act:', err);
       }
     }
+
+    async function loadObservabilityScenario(scenarioId) {
+      try {
+        const response = await fetch('/api/observability/scenarios/' + scenarioId);
+        const data = await response.json();
+        document.getElementById('observability-scenario-box').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        console.error('Error loading scenario:', err);
+      }
+    }
+
+    async function sendNeuroChat() {
+      try {
+        const q = document.getElementById('neuro-chat-input').value;
+        const response = await fetch('/api/neuro/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q })
+        });
+        const data = await response.json();
+        document.getElementById('neuro-chat-output').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        console.error('Error querying Neuro:', err);
+      }
+    }
   </script>
 </body>
 </html>
@@ -469,6 +611,11 @@ class DashboardAppState:
         project_id=project_id,
         dataset_id=dataset_id,
         mode="auto",
+        mirror_path=mirror_path,
+    )
+    self.mvp_state = ObservabilityMVPState(
+        project_id=project_id,
+        dataset_id="gsk_observability_demo",
         mirror_path=mirror_path,
     )
     self._lock = threading.Lock()
@@ -760,6 +907,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
   def do_GET(self) -> None:  # pylint: disable=invalid-name
     parsed = urlparse(self.path)
     path = parsed.path.rstrip("/") or "/"
+    query_params = parse_qs(parsed.query)
 
     if path == "/":
       self._send_html(200, DASHBOARD_HTML_TEMPLATE)
@@ -782,12 +930,54 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
       self._handle_trigger_act(act_str)
       return
 
+    # Round 3 Observability MVP & "Neuro" Conversational AI routes
+    if path == "/api/observability/status":
+      self._send_json(200, self.app_state.mvp_state.get_observability_status())
+      return
+
+    if path in ("/api/observability/anomalies", "/api/anomalies"):
+      host_f = query_params.get("hostname", [None])[0]
+      cls_f = query_params.get("classification", [None])[0]
+      self._send_json(
+          200,
+          self.app_state.mvp_state.get_anomalies_payload(
+              hostname_filter=host_f,
+              classification_filter=cls_f,
+          ),
+      )
+      return
+
+    if path in ("/api/observability/topology", "/api/observability/gql_topology"):
+      self._send_json(200, self.app_state.mvp_state.get_topology_payload())
+      return
+
+    if path in ("/api/observability/scenarios", "/api/observability/cascading_scenarios"):
+      scen_f = query_params.get("scenario", [None])[0]
+      self._send_json(200, self.app_state.mvp_state.get_scenarios_payload(scen_f))
+      return
+
+    if path.startswith("/api/observability/scenarios/"):
+      scen_id = path.split("/api/observability/scenarios/", 1)[1]
+      try:
+        self._send_json(200, self.app_state.mvp_state.get_scenarios_payload(scen_id))
+      except ValueError as exc:
+        self._send_json(400, {"status": "ERROR", "message": str(exc)})
+      return
+
+    if path == "/api/neuro/chat":
+      q = query_params.get("question", [query_params.get("q", [""])[0]])[0]
+      self._send_json(200, self.app_state.mvp_state.handle_neuro_chat(q))
+      return
+
     self._send_json(404, {"status": "ERROR", "message": f"Not found: {path}"})
 
   def do_POST(self) -> None:  # pylint: disable=invalid-name
     content_len = int(self.headers.get("Content-Length", "0") or "0")
-    if content_len > 0:
-      _ = self.rfile.read(content_len)
+    raw_body = self.rfile.read(content_len) if content_len > 0 else b"{}"
+    try:
+      body_json = json.loads(raw_body.decode("utf-8") or "{}")
+    except Exception:  # pylint: disable=broad-except
+      body_json = {}
 
     parsed = urlparse(self.path)
     path = parsed.path.rstrip("/")
@@ -795,6 +985,33 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     if path.startswith("/api/trigger_act/"):
       act_str = path.split("/api/trigger_act/", 1)[1]
       self._handle_trigger_act(act_str)
+      return
+
+    if path == "/api/neuro/chat":
+      question = (
+          body_json.get("question")
+          or body_json.get("prompt")
+          or body_json.get("query")
+          or body_json.get("message")
+          or ""
+      )
+      self._send_json(200, self.app_state.mvp_state.handle_neuro_chat(str(question)))
+      return
+
+    if path.startswith("/api/observability/scenarios/"):
+      scen_id = path.split("/api/observability/scenarios/", 1)[1]
+      try:
+        self._send_json(200, self.app_state.mvp_state.get_scenarios_payload(scen_id))
+      except ValueError as exc:
+        self._send_json(400, {"status": "ERROR", "message": str(exc)})
+      return
+
+    if path in ("/api/observability/scenarios", "/api/observability/cascading_scenarios"):
+      scen_id = body_json.get("scenario_id") or body_json.get("scenario")
+      try:
+        self._send_json(200, self.app_state.mvp_state.get_scenarios_payload(scen_id))
+      except ValueError as exc:
+        self._send_json(400, {"status": "ERROR", "message": str(exc)})
       return
 
     self._send_json(404, {"status": "ERROR", "message": f"Not found: {path}"})
