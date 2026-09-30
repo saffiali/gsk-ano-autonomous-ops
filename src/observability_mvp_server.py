@@ -2002,7 +2002,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
   parser = argparse.ArgumentParser(
       description="GSK Enterprise Observability Platform ('Neuro') — MVP Workbench Server & CLI"
   )
-  parser.add_argument("--host", default="127.0.0.1", help="Bind host address")
+  parser.add_argument("--host", default="0.0.0.0", help="Bind host address (default: 0.0.0.0)")
   parser.add_argument("--port", type=int, default=8085, help="Bind TCP port")
   parser.add_argument(
       "--project",

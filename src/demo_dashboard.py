@@ -30,7 +30,11 @@ if str(PROJECT_ROOT) not in sys.path:
   sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.demo_runner import DemoExecutionEngine
-from src.observability_mvp_server import NEURO_SYSTEM_PROMPT, ObservabilityMVPState
+from src.observability_mvp_server import (
+    NEURO_SYSTEM_PROMPT,
+    OBSERVABILITY_WORKBENCH_HTML,
+    ObservabilityMVPState,
+)
 
 
 DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -68,7 +72,7 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
           </h1>
           <p class="text-xs text-slate-400">
             GCP Project: <span class="text-cyan-400 font-mono">gke-demos-363017</span> |
-            Dataset: <span class="text-cyan-400 font-mono">gsk_ano_ops</span> |
+            Dataset: <span class="text-cyan-400 font-mono">gsk_ano_ops &amp; gsk_observability_demo</span> |
             Region: <span class="text-emerald-400 font-mono">europe-west2 (London / EU)</span>
           </p>
         </div>
@@ -76,6 +80,10 @@ DASHBOARD_HTML_TEMPLATE = """<!DOCTYPE html>
 
       <!-- One-Click Interactive Act Trigger Buttons -->
       <div class="flex flex-wrap items-center gap-2">
+        <a href="/neuro"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-900 hover:bg-indigo-700 text-indigo-100 border border-indigo-500 transition cursor-pointer">
+          GSK 'Neuro' Observability Workbench →
+        </a>
         <button onclick="triggerAct(1)" id="btn-act-1"
           class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-950 hover:bg-cyan-800 text-cyan-200 border border-cyan-700 transition cursor-pointer">
           Act 1: Novel Log Outlier (Vector Search)
@@ -911,6 +919,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     if path == "/":
       self._send_html(200, DASHBOARD_HTML_TEMPLATE)
+      return
+
+    if path in ("/neuro", "/observability", "/workbench"):
+      self._send_html(200, OBSERVABILITY_WORKBENCH_HTML)
       return
 
     if path == "/api/status":
