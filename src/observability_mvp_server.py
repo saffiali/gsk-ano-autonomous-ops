@@ -1753,88 +1753,948 @@ ORDER BY t.timestamp DESC;"""
 
 
 OBSERVABILITY_WORKBENCH_HTML = """<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GSK Enterprise Observability Platform ("Neuro") — Interactive MVP Workbench</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="description" content="GSK Enterprise Observability & Neuro AI — Interactive Step-by-Step Executive Demo Walkthrough">
+  <title>GSK Enterprise Observability &amp; "Neuro" AI — Guided Executive Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f1f5f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --border-light: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --brand-orange: #f36633;
+      --brand-blue: #0284c7;
+      --brand-blue-bg: #e0f2fe;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --warning-border: #fde68a;
+      --success: #059669;
+      --success-bg: #ecfdf5;
+      --success-border: #a7f3d0;
+      --info: #0369a1;
+      --info-bg: #f0f9ff;
+      --info-border: #bae6fd;
+      --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.07);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* Top Brand & Guided Stepper Bar */
+    .top-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-light);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: var(--shadow-sm);
+    }
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-badge {
+      background: var(--brand-orange);
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      letter-spacing: 0.04em;
+    }
+    .brand-title h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+    .brand-title p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .step-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+    .btn:hover { background: var(--bg-subtle); }
+    .btn-primary {
+      background: var(--brand-blue);
+      color: #fff;
+      border-color: var(--brand-blue);
+    }
+    .btn-primary:hover { background: #0369a1; }
+
+    /* 4-Step Visual Progress Navigation */
+    .stepper-bar {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 12px 24px 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .step-tab {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-bottom: 3px solid transparent;
+      border-radius: 10px 10px 0 0;
+      padding: 12px 16px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+    .step-tab:hover { background: #e2e8f0; }
+    .step-tab.active {
+      background: var(--bg-surface);
+      border-color: var(--border-light);
+      border-bottom-color: var(--brand-orange);
+      box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.04);
+    }
+    .step-num {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--brand-orange);
+      display: block;
+      margin-bottom: 2px;
+    }
+    .step-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: block;
+    }
+    .step-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    /* Main Container & Story Banner */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    .presenter-banner {
+      background: linear-gradient(135deg, #fff7ed 0%, #f0f9ff 100%);
+      border: 1px solid #fed7aa;
+      border-radius: 12px;
+      padding: 18px 22px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .presenter-banner-text { flex: 1; min-width: 280px; }
+    .presenter-label {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #c2410c;
+      background: #ffedd5;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .presenter-banner h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .presenter-banner p {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* Executive KPI Grid */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-clickable {
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .card-clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .card-clickable.selected {
+      border: 2px solid var(--brand-blue);
+      background: #f8fdff;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .badge-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+    .badge-success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+    .badge-info { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
+
+    .big-stat {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin: 8px 0 4px;
+      letter-spacing: -0.02em;
+    }
+    .card-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* Clean Tables */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-light);
+      color: var(--text-primary);
+      vertical-align: top;
+    }
+    tr:hover td { background: #f8fafc; }
+
+    /* Step 2: 4-Column Topology Map */
+    .topo-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .topo-col {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .topo-col-header {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .topo-node {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+    }
+    .topo-node.active-path {
+      border: 2px solid var(--danger);
+      background: var(--danger-bg);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.14);
+    }
+    .topo-node-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .topo-node-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Step 3: 3-Stage Waterfall Cards */
+    .stage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .stage-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-left: 4px solid var(--brand-blue);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .stage-item.stage-2 { border-left-color: var(--warning); }
+    .stage-item.stage-3 { border-left-color: var(--danger); }
+
+    .rca-point {
+      background: var(--bg-subtle);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .rca-point-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--brand-blue);
+      margin-bottom: 4px;
+    }
+
+    /* Step 4: Ask Neuro Assistant */
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .prompt-pill {
+      background: var(--info-bg);
+      color: var(--info);
+      border: 1px solid var(--info-border);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .prompt-pill:hover {
+      background: #bae6fd;
+    }
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .search-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    details.tech-drawer {
+      margin-top: 18px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    details.tech-drawer summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    pre.code-block {
+      margin-top: 10px;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 14px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+    @media (max-width: 900px) {
+      .stepper-bar, .topo-grid { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
-  <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-    <div>
-      <h1 class="text-lg font-bold text-white">
-        GSK Enterprise Observability Platform ("Neuro") — Unified BigQuery ML, ISO GQL &amp; AI Workbench
-      </h1>
-      <p class="text-xs text-slate-400 font-mono">
-        Project: gke-demos-363017 | Dataset: gsk_observability_demo | Graph: gsk_infrastructure_dependency_graph | Models: ARIMA_PLUS, ARIMA_PLUS_XREG, TimesFM 2.5, gemini-2.5-flash
-      </p>
+<body>
+
+  <!-- TOP HEADER & GUIDED NAVIGATION -->
+  <header class="top-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <span class="brand-badge">GSK &times; Google Cloud</span>
+        <div class="brand-title">
+          <h1>Enterprise Observability &amp; "Neuro" AI Assistant</h1>
+          <p>Interactive Step-by-Step Executive Demo &bull; Live on GCP Project <strong>gke-demos-363017</strong> (London / EU)</p>
+        </div>
+      </div>
+      <div class="step-controls">
+        <button class="btn" id="btn-prev-step" onclick="changeStep(-1)">&larr; Previous Step</button>
+        <button class="btn btn-primary" id="btn-next-step" onclick="changeStep(1)">Next Step: Full-Stack Map &rarr;</button>
+        <a class="btn" href="http://saffi-jetski-dev.c.googlers.com:8080/">ANO 4-Act Command Center</a>
+      </div>
     </div>
-    <div class="flex items-center gap-2">
-      <button onclick="loadScenario('A')" class="px-3 py-1.5 rounded bg-rose-950 border border-rose-700 text-rose-200 text-xs font-semibold">Scenario A: JVM OOM (srv-b-batch-02)</button>
-      <button onclick="loadScenario('B')" class="px-3 py-1.5 rounded bg-amber-950 border border-amber-700 text-amber-200 text-xs font-semibold">Scenario B: PG 500/500 &rarr; HTTP 504</button>
-      <button onclick="loadScenario('C')" class="px-3 py-1.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-200 text-xs font-semibold">Scenario C: /mnt/gsk_batch Drop to 0.0</button>
-    </div>
+
+    <!-- 4-STEP VISUAL WIZARD TABS -->
+    <nav class="stepper-bar" aria-label="Demo Walkthrough Steps">
+      <button class="step-tab active" id="tab-step-1" onclick="goToStep(1)">
+        <span class="step-num">Step 1 of 4</span>
+        <span class="step-name">Smart Baselines &amp; Noise Reduction</span>
+        <span class="step-desc">Catch real crashes &amp; silence maintenance alarms</span>
+      </button>
+      <button class="step-tab" id="tab-step-2" onclick="goToStep(2)">
+        <span class="step-num">Step 2 of 4</span>
+        <span class="step-name">Full-Stack Blast Radius Map</span>
+        <span class="step-desc">Physical Switch &rarr; VMware &rarr; Server &rarr; App</span>
+      </button>
+      <button class="step-tab" id="tab-step-3" onclick="goToStep(3)">
+        <span class="step-num">Step 3 of 4</span>
+        <span class="step-name">3 Real Manufacturing Scenarios</span>
+        <span class="step-desc">Step-by-step timeline &amp; AI Root Cause</span>
+      </button>
+      <button class="step-tab" id="tab-step-4" onclick="goToStep(4)">
+        <span class="step-num">Step 4 of 4</span>
+        <span class="step-name">Ask "Neuro" AI Assistant</span>
+        <span class="step-desc">Plain-English questions &rarr; Instant playbooks</span>
+      </button>
+    </nav>
   </header>
 
-  <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-cyan-400 mb-2">
-          Dynamic Confidence Band &amp; Anomaly Explorer (ARIMA_PLUS / ARIMA_PLUS_XREG / GAP_FILL)
-        </h2>
-        <p class="text-xs text-slate-400 mb-3">
-          Classifications: <code>SPIKE_ANOMALY</code>, <code>SILENT_HOST_DROP_TO_ZERO</code> (0.0), <code>DIP_ANOMALY</code>, <code>SUPPRESSED_MAINTENANCE_WINDOW</code> (<code>CHG0049281</code>), <code>NORMAL</code>
-        </p>
-        <pre id="anomalies-box" class="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-emerald-300 overflow-x-auto max-h-64">Loading anomaly series...</pre>
-      </div>
+  <main class="container">
 
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-purple-400 mb-2">
-          Full-Stack ISO GQL Topology Visualizer (Switch &rarr; Hypervisor &rarr; Host &rarr; Application)
-        </h2>
-        <p class="text-xs text-slate-400 mb-3 font-mono">
-          (Switch: sw-core-stv-01)-[:CONNECTED_TO]-&gt;(Hypervisor: esxi-cluster-04)-[:HOSTS]-&gt;(Host: srv-b-batch-02 / srv-b-db-01)-[:RUNS]-&gt;(Application)
-        </p>
-        <pre id="topology-box" class="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-purple-300 overflow-x-auto max-h-64">Loading ISO GQL topology...</pre>
-      </div>
-    </section>
-
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 mb-2">
-          Cascading Failure Waterfall &amp; Gemini 2.5 Flash 3-Sentence RCA
-        </h2>
-        <pre id="scenario-box" class="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-amber-200 overflow-x-auto max-h-72">Select Scenario A, B, or C above...</pre>
-      </div>
-
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-400 mb-2">
-          GSK "Neuro" Conversational AI Assistant (NL &rarr; Verified SQL / ISO GQL)
-        </h2>
-        <div class="flex gap-2 mb-3">
-          <input id="neuro-input" type="text" value="Show blast radius for PostgreSQL connection pool exhaustion 500/500 and upstream HTTP 504 timeouts"
-            class="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-white font-mono" />
-          <button onclick="askNeuro()" class="px-4 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold">Ask Neuro</button>
+    <!-- =====================================================================
+         STEP 1: SMART BASELINES & NOISE SUPPRESSION
+         ===================================================================== -->
+    <section class="step-panel active" id="panel-step-1">
+      <div class="presenter-banner">
+        <div class="presenter-banner-text">
+          <span class="presenter-label">Step 1 Presenter Story &bull; Why Static Thresholds Fail</span>
+          <h2>Replacing 80% Static Alerts with Self-Learning AI Baselines Across 6,000+ GSK Servers</h2>
+          <p>
+            Traditional monitoring pages engineers whenever CPU crosses 80%&mdash;even during planned ServiceNow maintenance&mdash;while missing "silent freezes" when a server stops reporting (0%). Click the 3 cards below to see how BigQuery ML distinguishes real emergencies from planned maintenance.
+          </p>
         </div>
-        <pre id="neuro-box" class="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono text-cyan-200 overflow-x-auto max-h-64">Ready for SRE triage query...</pre>
+        <button class="btn btn-primary" onclick="goToStep(2)">Continue to Step 2: Blast Radius Map &rarr;</button>
+      </div>
+
+      <!-- 3 Clickable Outcome Highlight Cards -->
+      <div class="grid-3">
+        <div class="card card-clickable selected" id="filter-card-ALL" onclick="filterAnomalies('ALL')">
+          <span class="badge badge-danger">1. Early Crash Detection (Stevenage)</span>
+          <div class="big-stat">94.5% CPU</div>
+          <p class="card-subtitle">
+            <strong>EBRS Batch Server (srv-b-batch-02)</strong> breached its normal AI ceiling (<strong>68.5%</strong>) 15 minutes before a Java Out-of-Memory crash.
+          </p>
+        </div>
+
+        <div class="card card-clickable" id="filter-card-SUPPRESSED" onclick="filterAnomalies('SUPPRESSED_MAINTENANCE_WINDOW')">
+          <span class="badge badge-warning">2. Planned Patching Silenced (0 Pager Noise)</span>
+          <div class="big-stat">88.4% CPU &bull; Suppressed</div>
+          <p class="card-subtitle">
+            <strong>Oracle LIMS DB (ora-db-stv-01)</strong> spiked during ServiceNow Change <strong>CHG0049281</strong>. AI recognized the maintenance window and silenced the false alarm.
+          </p>
+        </div>
+
+        <div class="card card-clickable" id="filter-card-ZERO" onclick="filterAnomalies('SILENT_HOST_DROP_TO_ZERO')">
+          <span class="badge badge-info">3. Silent Server Freeze Caught (Ware)</span>
+          <div class="big-stat">0.0% &bull; Heartbeat Lost</div>
+          <p class="card-subtitle">
+            <strong>Ware Batch Server (srv-c-ware-01)</strong> froze on shared storage and dropped to <strong>0.0%</strong> (<code>SILENT_HOST_DROP_TO_ZERO</code>). Caught immediately via AI zero-fill.
+          </p>
+        </div>
+      </div>
+
+      <!-- Visual Confidence Band Chart + Live Server Health Table -->
+      <div class="grid-2">
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <h3 style="font-size:15px; font-weight:700;">Visual AI Confidence Corridor vs. Actual Server Load</h3>
+              <p style="font-size:12px; color:var(--text-muted);">Green shaded band = Expected normal operating range learned by BigQuery ML</p>
+            </div>
+            <span class="badge badge-success">7-Day Horizon &bull; UK Holidays ('GB')</span>
+          </div>
+          <svg viewBox="0 0 600 240" style="width:100%; height:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+            <!-- Grid lines -->
+            <line x1="50" y1="30" x2="570" y2="30" stroke="#e2e8f0" stroke-dasharray="4 4"/>
+            <line x1="50" y1="90" x2="570" y2="90" stroke="#e2e8f0" stroke-dasharray="4 4"/>
+            <line x1="50" y1="150" x2="570" y2="150" stroke="#e2e8f0" stroke-dasharray="4 4"/>
+            <line x1="50" y1="205" x2="570" y2="205" stroke="#cbd5e1"/>
+            <text x="12" y="34" font-size="10" fill="#64748b">100%</text>
+            <text x="18" y="94" font-size="10" fill="#64748b">70%</text>
+            <text x="18" y="154" font-size="10" fill="#64748b">40%</text>
+            <text x="24" y="208" font-size="10" fill="#64748b">0%</text>
+
+            <!-- Shaded Green Normal Confidence Corridor (32% to 68%) -->
+            <polygon points="50,95 180,92 310,95 430,52 560,94 560,158 430,130 310,155 180,156 50,155" fill="#bbf7d0" fill-opacity="0.55"/>
+            <polyline points="50,95 180,92 310,95 430,52 560,94" fill="none" stroke="#10b981" stroke-width="1.5" stroke-dasharray="5 3"/>
+
+            <!-- Actual CPU Load Line -->
+            <polyline points="50,128 140,122 230,42 330,125 430,56 530,205" fill="none" stroke="#0f172a" stroke-width="2.5"/>
+
+            <!-- Pin 1: Spike Breach (94.5%) -->
+            <circle cx="230" cy="42" r="7" fill="#dc2626"/>
+            <rect x="145" y="8" width="175" height="24" rx="5" fill="#fef2f2" stroke="#fecaca"/>
+            <text x="153" y="24" font-size="10" font-weight="700" fill="#dc2626">srv-b-batch-02: 94.5% (Spike!)</text>
+
+            <!-- Pin 2: Planned Maintenance Suppressed (88.4%) -->
+            <circle cx="430" cy="56" r="7" fill="#d97706"/>
+            <rect x="335" y="22" width="190" height="24" rx="5" fill="#fffbeb" stroke="#fde68a"/>
+            <text x="343" y="38" font-size="10" font-weight="700" fill="#b45309">CHG0049281: 88.4% (Suppressed)</text>
+
+            <!-- Pin 3: Silent Drop to 0.0% -->
+            <circle cx="530" cy="205" r="7" fill="#0284c7"/>
+            <rect x="385" y="172" width="180" height="24" rx="5" fill="#f0f9ff" stroke="#bae6fd"/>
+            <text x="393" y="188" font-size="10" font-weight="700" fill="#0369a1">srv-c-ware-01: 0.0% (Frozen!)</text>
+          </svg>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <h3 style="font-size:15px; font-weight:700;">Live Evaluated Server Signals</h3>
+              <p style="font-size:12px; color:var(--text-muted);">Showing plain-English AI classification across Stevenage, London, and Ware</p>
+            </div>
+            <button class="btn" style="padding:4px 10px; font-size:11px;" onclick="filterAnomalies('ALL')">Show All</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Server &amp; Site</th>
+                  <th>Actual Load</th>
+                  <th>Normal Ceiling</th>
+                  <th>AI Verdict &amp; Action</th>
+                </tr>
+              </thead>
+              <tbody id="anomalies-tbody">
+                <tr><td colspan="4">Loading live telemetry...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
+
+    <!-- =====================================================================
+         STEP 2: FULL-STACK BLAST RADIUS MAP (ISO GQL PROPERTY GRAPH)
+         ===================================================================== -->
+    <section class="step-panel" id="panel-step-2">
+      <div class="presenter-banner">
+        <div class="presenter-banner-text">
+          <span class="presenter-label">Step 2 Presenter Story &bull; Eliminating Operational Silos</span>
+          <h2>One-Click Blast Radius: From Physical SolarWinds Switch to Manufacturing App</h2>
+          <p>
+            Previously, network teams looked at SolarWinds, virtualization teams looked at VMware, and app teams looked at EBRS logs. BigQuery's Property Graph (<code>gsk_infrastructure_dependency_graph</code>) connects all 4 layers so you can trace any outage in seconds.
+          </p>
+        </div>
+        <button class="btn btn-primary" onclick="goToStep(3)">Continue to Step 3: Incident Replay &rarr;</button>
+      </div>
+
+      <!-- Interactive Path Highlighter Buttons -->
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:center;">
+        <span style="font-size:13px; font-weight:700; color:var(--text-secondary);">Click to Highlight Dependency Chain:</span>
+        <button class="btn" onclick="highlightTopology('A')">Highlight Scenario A (Stevenage Batch Memory Crash)</button>
+        <button class="btn" onclick="highlightTopology('B')">Highlight Scenario B (Stevenage DB Lock &rarr; London Web 504s)</button>
+        <button class="btn" onclick="highlightTopology('C')">Highlight Scenario C (Ware Storage Stall &rarr; Scheduler Drop)</button>
+      </div>
+
+      <div id="topo-impact-banner" class="card" style="margin-bottom:18px; background:#fef2f2; border-color:#fecaca;">
+        <strong style="color:#dc2626; font-size:13px;">Active Highlighted Blast Radius Path:</strong>
+        <span id="topo-impact-text" style="font-size:13px; color:#0f172a; margin-left:8px;">
+          Stevenage Core Switch (<code>sw-core-stv-01</code>) &rarr; VMware ESXi Cluster (<code>esxi-cluster-04</code>) &rarr; Database Server (<code>srv-b-db-01</code>) &rarr; <code>EBRS-Database-Core</code> &larr; <strong>Impacts Operators on <code>EBRS-Web-Portal</code> (London)</strong>
+        </span>
+      </div>
+
+      <!-- 4-Column Visual Architecture Map -->
+      <div class="topo-grid" id="topo-columns">
+        <div class="topo-col">
+          <div class="topo-col-header">1. Physical Network (SolarWinds)</div>
+          <div id="topo-col-switch"></div>
+        </div>
+        <div class="topo-col">
+          <div class="topo-col-header">2. Hypervisors &amp; Clusters (VMware/AKS)</div>
+          <div id="topo-col-hypervisor"></div>
+        </div>
+        <div class="topo-col">
+          <div class="topo-col-header">3. Virtual Servers (ServiceNow CMDB)</div>
+          <div id="topo-col-host"></div>
+        </div>
+        <div class="topo-col">
+          <div class="topo-col-header">4. Manufacturing Apps (GxP / EBRS)</div>
+          <div id="topo-col-app"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         STEP 3: STEP-BY-STEP INCIDENT REPLAY (SCENARIOS A, B, C)
+         ===================================================================== -->
+    <section class="step-panel" id="panel-step-3">
+      <div class="presenter-banner">
+        <div class="presenter-banner-text">
+          <span class="presenter-label">Step 3 Presenter Story &bull; Automated Root Cause Analysis</span>
+          <h2>Walk Through 3 Real-World Manufacturing Incidents Caught Automatically</h2>
+          <p>
+            Select any of the 3 manufacturing scenarios below to see how the platform correlates metric spikes with the preceding 5 minutes of system error logs and uses <strong>Gemini 2.5 Flash</strong> to write a 3-point executive action plan.
+          </p>
+        </div>
+        <button class="btn btn-primary" onclick="goToStep(4)">Continue to Step 4: Ask "Neuro" AI &rarr;</button>
+      </div>
+
+      <!-- Scenario Selector Cards -->
+      <div class="grid-3">
+        <div class="card card-clickable selected" id="scen-card-A" onclick="loadScenario('A')">
+          <span class="badge badge-danger">Scenario A &bull; Stevenage (EBRS)</span>
+          <h3 style="font-size:16px; font-weight:700; margin:8px 0 4px;">Batch Memory Leak &amp; Crash</h3>
+          <p class="card-subtitle">Spark genomics batch worker leaks memory from 55% &rarr; 98.8% before crashing.</p>
+        </div>
+        <div class="card card-clickable" id="scen-card-B" onclick="loadScenario('B')">
+          <span class="badge badge-warning">Scenario B &bull; Stevenage &rarr; London</span>
+          <h3 style="font-size:16px; font-weight:700; margin:8px 0 4px;">Database Lock &rarr; Web Portal 504s</h3>
+          <p class="card-subtitle">PostgreSQL 500/500 pool exhaustion in Stevenage causes Web Portal timeouts in London.</p>
+        </div>
+        <div class="card card-clickable" id="scen-card-C" onclick="loadScenario('C')">
+          <span class="badge badge-info">Scenario C &bull; Ware (MES Batch)</span>
+          <h3 style="font-size:16px; font-weight:700; margin:8px 0 4px;">Storage Freeze &amp; Silent Drop to 0%</h3>
+          <p class="card-subtitle">Shared storage <code>/mnt/gsk_batch</code> stalls at 965ms I/O wait, evicting the server.</p>
+        </div>
+      </div>
+
+      <!-- Visual Waterfall + Executive 3-Sentence Summary -->
+      <div class="grid-2">
+        <div class="card">
+          <h3 id="scen-title" style="font-size:16px; font-weight:700; margin-bottom:4px;">Scenario Progression Timeline</h3>
+          <p id="scen-meta" style="font-size:12px; color:var(--text-muted); margin-bottom:16px;"></p>
+          <div class="stage-list" id="scen-stages"></div>
+
+          <h4 style="font-size:13px; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin:20px 0 10px;">
+            Correlated System Logs (Captured Within 5-Minute Window)
+          </h4>
+          <div id="scen-logs" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div>
+              <h3 style="font-size:16px; font-weight:700;">Gemini 2.5 Flash &mdash; Executive Incident Briefing</h3>
+              <p style="font-size:12px; color:var(--text-muted);">Synthesized automatically from metrics, logs, and topology graph</p>
+            </div>
+            <span class="badge badge-success">Confidence: 99.4%</span>
+          </div>
+
+          <div id="scen-rca-cards"></div>
+
+          <div class="card" style="background:var(--bg-subtle); margin-top:16px;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin-bottom:6px;">
+              Full-Stack Topology Chain Involved
+            </div>
+            <div id="scen-chain" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-primary);"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         STEP 4: ASK "NEURO" CONVERSATIONAL AI ASSISTANT
+         ===================================================================== -->
+    <section class="step-panel" id="panel-step-4">
+      <div class="presenter-banner">
+        <div class="presenter-banner-text">
+          <span class="presenter-label">Step 4 Presenter Story &bull; Conversational Operations ("Neuro")</span>
+          <h2>Ask Plain-English Questions &mdash; Get Verified Answers &amp; Recovery Playbooks</h2>
+          <p>
+            Click any suggested question below (or type your own). <strong>Neuro</strong> automatically translates your question into a verified BigQuery SQL or ISO GQL Graph query and returns an executive incident summary.
+          </p>
+        </div>
+        <button class="btn" onclick="goToStep(1)">&larr; Restart Guided Tour</button>
+      </div>
+
+      <div class="card" style="margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-bottom:8px;">
+          One-Click Demo Questions (Click to Ask Neuro):
+        </div>
+        <div class="pill-row">
+          <button class="prompt-pill" onclick="askPreset('What active service degradation is occurring across EBRS manufacturing sites right now?')">
+            1. What active incidents are happening across GSK sites right now?
+          </button>
+          <button class="prompt-pill" onclick="askPreset('Show blast radius for PostgreSQL connection pool exhaustion 500/500 and upstream HTTP 504 timeouts')">
+            2. Why is the London EBRS Web Portal failing with HTTP 504 timeouts?
+          </button>
+          <button class="prompt-pill" onclick="askPreset('Investigate silent host drop to 0.0 and /mnt/gsk_batch storage IO wait in Site_C_Ware')">
+            3. Did the Ware batch server silently freeze and drop to 0%?
+          </button>
+          <button class="prompt-pill" onclick="askPreset('Is CHG0049281 suppressed by ServiceNow maintenance window?')">
+            4. Why was no pager alert sent for the Stevenage Oracle DB spike (CHG0049281)?
+          </button>
+        </div>
+
+        <div class="search-bar">
+          <input id="neuro-input" class="search-input" type="text"
+            value="Show blast radius for PostgreSQL connection pool exhaustion 500/500 and upstream HTTP 504 timeouts"
+            placeholder="Ask Neuro a question about servers, applications, or maintenance windows..." />
+          <button class="btn btn-primary" onclick="askNeuro()">Ask Neuro AI</button>
+        </div>
+
+        <!-- Executive Briefing Output -->
+        <div id="neuro-executive-card"></div>
+
+        <!-- Collapsible Technical Drawer (Hidden by Default so UI stays clean!) -->
+        <details class="tech-drawer">
+          <summary>View Technical Details (Auto-Generated BigQuery SQL / ISO GQL Query &amp; Raw Records)</summary>
+          <pre class="code-block" id="neuro-sql-box">Loading query...</pre>
+        </details>
+      </div>
+    </section>
+
   </main>
 
   <script>
-    async function initWorkbench() {
-      const anomResp = await fetch('/api/observability/anomalies');
-      document.getElementById('anomalies-box').textContent = JSON.stringify(await anomResp.json(), null, 2);
-      const topoResp = await fetch('/api/observability/topology');
-      document.getElementById('topology-box').textContent = JSON.stringify(await topoResp.json(), null, 2);
-      await loadScenario('A');
-      await askNeuro();
+    let currentStep = 1;
+    let cachedAnomalies = [];
+    let cachedTopology = null;
+
+    const stepTitles = [
+      "",
+      "Smart Baselines & Noise Reduction",
+      "Full-Stack Blast Radius Map",
+      "3 Real Manufacturing Scenarios",
+      "Ask 'Neuro' AI Assistant"
+    ];
+
+    function goToStep(stepNum) {
+      currentStep = stepNum;
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById('tab-step-' + i).classList.toggle('active', i === stepNum);
+        document.getElementById('panel-step-' + i).classList.toggle('active', i === stepNum);
+      }
+      document.getElementById('btn-prev-step').disabled = (stepNum === 1);
+      const nextBtn = document.getElementById('btn-next-step');
+      if (stepNum < 4) {
+        nextBtn.textContent = 'Next Step: ' + stepTitles[stepNum + 1] + ' →';
+        nextBtn.onclick = () => changeStep(1);
+      } else {
+        nextBtn.textContent = 'Restart Guided Tour ↺';
+        nextBtn.onclick = () => goToStep(1);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    function changeStep(delta) {
+      const target = Math.min(4, Math.max(1, currentStep + delta));
+      goToStep(target);
+    }
+
+    function formatBadge(cls, changeId) {
+      if (cls === 'SPIKE_ANOMALY') return '<span class="badge badge-danger">CRITICAL SPIKE BREACH</span>';
+      if (cls === 'SILENT_HOST_DROP_TO_ZERO') return '<span class="badge badge-info">SILENT FREEZE (0.0% DROP)</span>';
+      if (cls === 'SUPPRESSED_MAINTENANCE_WINDOW') return '<span class="badge badge-warning">SUPPRESSED (' + (changeId || 'CHG0049281') + ')</span>';
+      return '<span class="badge badge-success">HEALTHY</span>';
+    }
+
+    function renderAnomaliesTable(rows) {
+      const tbody = document.getElementById('anomalies-tbody');
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">No matching server records.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.slice(0, 7).map(r => `
+        <tr>
+          <td>
+            <strong>${r.hostname}</strong>
+            <div style="font-size:11px; color:var(--text-muted);">${r.site_location.replace(/_/g, ' ')} &bull; ${r.system_id}</div>
+          </td>
+          <td><strong>${Number(r.actual_cpu).toFixed(1)}%</strong></td>
+          <td>${Number(r.expected_upper_bound).toFixed(1)}%</td>
+          <td>${formatBadge(r.anomaly_classification, r.active_change_id)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function filterAnomalies(classification) {
+      ['ALL', 'SUPPRESSED', 'ZERO'].forEach(k => {
+        const el = document.getElementById('filter-card-' + k);
+        if (el) el.classList.remove('selected');
+      });
+      if (classification === 'ALL') document.getElementById('filter-card-ALL').classList.add('selected');
+      if (classification === 'SUPPRESSED_MAINTENANCE_WINDOW') document.getElementById('filter-card-SUPPRESSED').classList.add('selected');
+      if (classification === 'SILENT_HOST_DROP_TO_ZERO') document.getElementById('filter-card-ZERO').classList.add('selected');
+
+      if (classification === 'ALL') {
+        renderAnomaliesTable(cachedAnomalies);
+      } else {
+        const filtered = cachedAnomalies.filter(r => r.anomaly_classification === classification);
+        renderAnomaliesTable(filtered);
+      }
+    }
+
+    function renderTopologyColumns(highlightIds, bannerText) {
+      if (!cachedTopology) return;
+      document.getElementById('topo-impact-text').innerHTML = bannerText;
+      const byLabel = { Switch: [], Hypervisor: [], Host: [], Application: [] };
+      (cachedTopology.nodes || []).forEach(n => {
+        if (byLabel[n.label]) byLabel[n.label].push(n);
+      });
+
+      const renderCol = (nodes) => nodes.map(n => {
+        const isHit = highlightIds.includes(n.id) || highlightIds.includes(n.hostname);
+        return `
+          <div class="topo-node ${isHit ? 'active-path' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="topo-node-title">${n.hostname || n.id}</span>
+              ${isHit ? '<span class="badge badge-danger" style="font-size:10px; padding:1px 6px;">IMPACTED</span>' : ''}
+            </div>
+            <div class="topo-node-meta">${(n.site_location || n.tier || n.system_id || '').replace(/_/g, ' ')}</div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('topo-col-switch').innerHTML = renderCol(byLabel.Switch);
+      document.getElementById('topo-col-hypervisor').innerHTML = renderCol(byLabel.Hypervisor);
+      document.getElementById('topo-col-host').innerHTML = renderCol(byLabel.Host);
+      document.getElementById('topo-col-app').innerHTML = renderCol(byLabel.Application);
+    }
+
+    function highlightTopology(scen) {
+      if (scen === 'A') {
+        renderTopologyColumns(
+          ['sw-core-stv-01', 'esxi-cluster-04', 'srv-b-batch-02', 'app-ebrs-batch', 'EBRS-Batch-Engine', 'app-ebrs-web', 'EBRS-Web-Portal'],
+          '<strong>Scenario A Path:</strong> Stevenage Switch (<code>sw-core-stv-01</code>) &rarr; VMware ESXi (<code>esxi-cluster-04</code>) &rarr; Batch Server (<code>srv-b-batch-02</code>) &rarr; <strong>EBRS-Batch-Engine Memory Crash</strong>'
+        );
+      } else if (scen === 'B') {
+        renderTopologyColumns(
+          ['sw-core-stv-01', 'esxi-cluster-04', 'srv-b-db-01', 'srv-a-web-01', 'srv-a-web-04', 'app-ebrs-db', 'EBRS-Database-Core', 'app-ebrs-web', 'EBRS-Web-Portal'],
+          '<strong>Scenario B Cross-Site Blast Radius:</strong> Stevenage DB Server (<code>srv-b-db-01</code>) connection pool exhaustion (500/500) cascades upstream to London Web Servers (<code>srv-a-web-01</code>, <code>srv-a-web-04</code>) causing HTTP 504 timeouts on <strong>EBRS-Web-Portal</strong>.'
+        );
+      } else {
+        renderTopologyColumns(
+          ['sw-core-ware-01', 'aks-prod-ware-02', 'srv-c-ware-01', 'app-mes-sched', 'MES-Batch-Scheduler'],
+          '<strong>Scenario C Path:</strong> Ware Switch (<code>sw-core-ware-01</code>) &rarr; AKS Cluster (<code>aks-prod-ware-02</code>) &rarr; Storage Stall on <code>srv-c-ware-01</code> (0.0% Silent Drop) &rarr; <strong>MES-Batch-Scheduler Evicted</strong>.'
+        );
+      }
+    }
+
     async function loadScenario(id) {
+      ['A', 'B', 'C'].forEach(k => {
+        const card = document.getElementById('scen-card-' + k);
+        if (card) card.classList.toggle('selected', k === id);
+      });
       const resp = await fetch('/api/observability/scenarios/' + id);
-      document.getElementById('scenario-box').textContent = JSON.stringify(await resp.json(), null, 2);
+      const data = await resp.json();
+      const scen = data.scenario || data;
+
+      document.getElementById('scen-title').textContent = scen.title;
+      document.getElementById('scen-meta').textContent =
+        `Primary Server: ${scen.primary_host} | Location: ${scen.site_location.replace(/_/g, ' ')} | Impacted App: ${scen.impacted_application}`;
+
+      document.getElementById('scen-stages').innerHTML = (scen.stages || []).map((st, idx) => `
+        <div class="stage-item stage-${idx + 1}">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <strong style="font-size:14px;">${st.name}</strong>
+            <span style="font-size:11px; color:var(--text-muted); font-family:'JetBrains Mono', monospace;">${st.timestamp}</span>
+          </div>
+          <p style="font-size:13px; color:var(--text-secondary);">${st.description}</p>
+        </div>
+      `).join('');
+
+      document.getElementById('scen-logs').innerHTML = (scen.correlated_logs || []).map(l => `
+        <div style="background:#0f172a; color:#f8fafc; padding:10px 12px; border-radius:8px; font-family:'JetBrains Mono', monospace; font-size:11px;">
+          <span style="color:#f87171; font-weight:700;">[${l.severity}]</span>
+          <span style="color:#94a3b8;"> ${l.timestamp} (${l.hostname}):</span>
+          <div style="margin-top:3px; color:#e2e8f0;">${l.message}</div>
+        </div>
+      `).join('');
+
+      const rcaText = (scen.incident_root_cause_analysis && scen.incident_root_cause_analysis.gemini_root_cause_analysis) || '';
+      const parts = rcaText.split(/(?=\d\.\s)/).map(s => s.trim()).filter(Boolean);
+      const titles = ['1. Immediate Root Cause', '2. Business & Service Blast Radius', '3. Recommended Recovery Action'];
+      document.getElementById('scen-rca-cards').innerHTML = parts.map((p, i) => `
+        <div class="rca-point">
+          <div class="rca-point-label">${titles[i] || 'AI Finding'}</div>
+          <div style="font-size:13px; color:var(--text-primary);">${p.replace(/^\d\.\s*[^:]+:\s*/i, '')}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('scen-chain').textContent = scen.gql_topology_chain || '';
     }
+
+    function askPreset(qText) {
+      document.getElementById('neuro-input').value = qText;
+      askNeuro();
+    }
+
     async function askNeuro() {
       const q = document.getElementById('neuro-input').value;
       const resp = await fetch('/api/neuro/chat', {
@@ -1842,8 +2702,82 @@ OBSERVABILITY_WORKBENCH_HTML = """<!DOCTYPE html>
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({question: q})
       });
-      document.getElementById('neuro-box').textContent = JSON.stringify(await resp.json(), null, 2);
+      const data = await resp.json();
+      const ex = data.executive_summary || {};
+      const rcaParts = (ex.three_sentence_rca || '').split(/(?=\d\.\s)/).map(s => s.trim()).filter(Boolean);
+
+      document.getElementById('neuro-executive-card').innerHTML = `
+        <div style="border-top:1px solid var(--border-light); padding-top:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div>
+              <span class="badge badge-info">Neuro AI Verified Briefing (${data.query_type})</span>
+              <h3 style="font-size:16px; font-weight:700; margin-top:6px;">Question: "${data.question}"</h3>
+            </div>
+            <span class="badge badge-success">${data.row_count || 0} Live Records Matched</span>
+          </div>
+
+          <div class="grid-3" style="margin-bottom:16px;">
+            <div class="card" style="background:var(--bg-subtle); padding:14px;">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);">Impacted Server(s)</div>
+              <div style="font-size:14px; font-weight:700; margin-top:4px;">${ex.hostname || 'N/A'}</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Site: ${ex.physical_site || 'N/A'}</div>
+            </div>
+            <div class="card" style="background:var(--bg-subtle); padding:14px;">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);">Impacted Manufacturing System</div>
+              <div style="font-size:14px; font-weight:700; margin-top:4px;">${ex.impacted_application || 'N/A'}</div>
+            </div>
+            <div class="card" style="background:var(--bg-subtle); padding:14px;">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);">Measured Telemetry</div>
+              <div style="font-size:13px; font-weight:700; color:var(--danger); margin-top:4px;">${ex.measured_utilization || 'N/A'}</div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:12px;">
+            <div>
+              <h4 style="font-size:13px; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin-bottom:8px;">
+                Plain-English Root Cause Summary (Gemini 2.5 Flash)
+              </h4>
+              ${rcaParts.map(p => `
+                <div class="rca-point" style="margin-bottom:8px;">
+                  <div style="font-size:13px; color:var(--text-primary);">${p}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div>
+              <h4 style="font-size:13px; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin-bottom:8px;">
+                Actionable SRE Recovery Playbook
+              </h4>
+              <div class="card" style="background:#ecfdf5; border-color:#a7f3d0;">
+                <div style="font-size:13px; font-weight:600; color:#065f46; line-height:1.6;">
+                  ${ex.remediation_runbook || ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('neuro-sql-box').textContent =
+        `-- Auto-Generated ${data.query_type} Query (Intent: ${data.intent})\n` +
+        (data.generated_query || '') +
+        `\n\n-- Matched Records (${data.row_count}):\n` +
+        JSON.stringify(data.rows || [], null, 2);
     }
+
+    async function initWorkbench() {
+      const anomResp = await fetch('/api/observability/anomalies');
+      const anomData = await anomResp.json();
+      cachedAnomalies = anomData.anomalies || [];
+      renderAnomaliesTable(cachedAnomalies);
+
+      const topoResp = await fetch('/api/observability/topology');
+      cachedTopology = await topoResp.json();
+      highlightTopology('B');
+
+      await loadScenario('A');
+      await askNeuro();
+    }
+
     initWorkbench();
   </script>
 </body>
